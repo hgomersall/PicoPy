@@ -250,35 +250,35 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
     
     PICO_STATUS ps3000aOpenUnit(
             short * handle,
-            char * serial)
+            char * serial) nogil
 
     PICO_STATUS ps3000aOpenUnitAsync(
             short * status,
-            char * serial)
+            char * serial) nogil
 
     PICO_STATUS ps3000aOpenUnitProgress(
             short * handle,
             short * progressPercent,
-            short * complete) 
+            short * complete) nogil 
 
     PICO_STATUS ps3000aGetUnitInfo(
             short handle, 
             char * string,
             short stringLength,
             short * requiredSize,
-            PICO_INFO info)
+            PICO_INFO info) nogil
 
     PICO_STATUS ps3000aFlashLed(
             short handle,
-            short start)
+            short start) nogil
     
     PICO_STATUS ps3000aCloseUnit(
-            short handle)
+            short handle) nogil
     
     PICO_STATUS ps3000aMemorySegments(
             short handle,
             unsigned short nSegments,
-            long * nMaxSamples)
+            long * nMaxSamples) nogil
     
     PICO_STATUS ps3000aSetChannel(
             short handle,
@@ -286,11 +286,11 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             short enabled,
             PS3000A_COUPLING type, 
             PS3000A_RANGE range,
-            float analogOffset)
+            float analogOffset) nogil
 
     PICO_STATUS ps3000aSetNoOfCaptures(
             short handle,
-            unsigned short nCaptures)
+            unsigned short nCaptures) nogil
     
     PICO_STATUS ps3000aGetTimebase(
             short handle,
@@ -299,7 +299,7 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             long * timeIntervalNanoseconds,
             short oversample,
             long * maxSamples,
-            unsigned short segmentIndex)
+            unsigned short segmentIndex) nogil
     
     PICO_STATUS ps3000aGetTimebase2(
             short handle,
@@ -308,7 +308,7 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             float * timeIntervalNanoseconds,
             short oversample,
             long * maxSamples,
-            unsigned short segmentIndex)
+            unsigned short segmentIndex) nogil
     
     PICO_STATUS ps3000aSetSigGenArbitrary(
             short handle,
@@ -327,7 +327,7 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             unsigned long sweeps,
             PS3000A_SIGGEN_TRIG_TYPE triggerType,
             PS3000A_SIGGEN_TRIG_SOURCE triggerSource,
-            short extInThreshold)
+            short extInThreshold) nogil
     
     PICO_STATUS ps3000aSetSigGenBuiltIn(
             short handle,
@@ -344,18 +344,18 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             unsigned long sweeps,
             PS3000A_SIGGEN_TRIG_TYPE triggerType,
             PS3000A_SIGGEN_TRIG_SOURCE triggerSource,
-            short extInThreshold)
+            short extInThreshold) nogil
     
     PICO_STATUS ps3000aSigGenSoftwareControl(
             short handle,
-            short state)
+            short state) nogil
     
     PICO_STATUS ps3000aSetEts(
             short handle,
             PS3000A_ETS_MODE mode,
             short etsCycles,
             short etsInterleave,
-            long * sampleTimePicoseconds)
+            long * sampleTimePicoseconds) nogil
     
     PICO_STATUS ps3000aSetSimpleTrigger(
             short handle,
@@ -364,19 +364,19 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             short threshold,
             PS3000A_THRESHOLD_DIRECTION direction,
             unsigned long delay,
-            short autoTrigger_ms)
+            short autoTrigger_ms) nogil
     
     PICO_STATUS ps3000aSetTriggerChannelProperties(
             short handle,
             PS3000A_TRIGGER_CHANNEL_PROPERTIES * channelProperties,
             short nChannelProperties,
             short auxOutputEnable,
-            long autoTriggerMilliseconds)
+            long autoTriggerMilliseconds) nogil
     
     PICO_STATUS ps3000aSetTriggerChannelConditions(
             short handle,
             PS3000A_TRIGGER_CONDITIONS * conditions,
-            short nConditions)
+            short nConditions) nogil
     
     PICO_STATUS ps3000aSetTriggerChannelDirections(
             short handle,
@@ -385,11 +385,11 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             PS3000A_THRESHOLD_DIRECTION channelC,
             PS3000A_THRESHOLD_DIRECTION channelD,
             PS3000A_THRESHOLD_DIRECTION ext,
-            PS3000A_THRESHOLD_DIRECTION aux)
+            PS3000A_THRESHOLD_DIRECTION aux) nogil
     
     PICO_STATUS ps3000aSetTriggerDelay(
             short handle,
-            unsigned long delay)
+            unsigned long delay) nogil
     
     PICO_STATUS ps3000aSetPulseWidthQualifier(
             short handle,
@@ -398,25 +398,25 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             PS3000A_THRESHOLD_DIRECTION direction,
             unsigned long lower,
             unsigned long upper,
-            PS3000A_PULSE_WIDTH_TYPE type)
+            PS3000A_PULSE_WIDTH_TYPE type) nogil
     
     PICO_STATUS ps3000aIsTriggerOrPulseWidthQualifierEnabled(
             short handle,
             short * triggerEnabled,
-            short * pulseWidthQualifierEnabled)
+            short * pulseWidthQualifierEnabled) nogil
     
     PICO_STATUS ps3000aGetTriggerTimeOffset(
             short handle,
             unsigned long * timeUpper,
             unsigned long * timeLower,
             PS3000A_TIME_UNITS * timeUnits,
-            unsigned short segmentIndex )
+            unsigned short segmentIndex ) nogil
     
     PICO_STATUS ps3000aGetTriggerTimeOffset64(
             short handle,
             int64_t * time,
             PS3000A_TIME_UNITS * timeUnits,
-            unsigned short segmentIndex )
+            unsigned short segmentIndex ) nogil
     
     PICO_STATUS ps3000aGetValuesTriggerTimeOffsetBulk(
             short handle,
@@ -424,22 +424,22 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             unsigned long * timesLower,
             PS3000A_TIME_UNITS * timeUnits,
             unsigned short fromSegmentIndex,
-            unsigned short toSegmentIndex)
+            unsigned short toSegmentIndex) nogil
     
     PICO_STATUS ps3000aGetValuesTriggerTimeOffsetBulk64(
             short handle,
             int64_t * times,
             PS3000A_TIME_UNITS * timeUnits,
             unsigned short fromSegmentIndex,
-            unsigned short toSegmentIndex)
+            unsigned short toSegmentIndex) nogil
     
     PICO_STATUS ps3000aGetNoOfCaptures(
             short handle,
-            unsigned long * nCaptures)
+            unsigned long * nCaptures) nogil
     
     PICO_STATUS ps3000aGetNoOfProcessedCaptures(
             short handle,
-            unsigned long * nProcessedCaptures)
+            unsigned long * nProcessedCaptures) nogil
     
     PICO_STATUS ps3000aSetDataBuffer(
             short handle,
@@ -447,7 +447,7 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             short * buffer,
             long bufferLth,
             unsigned short segmentIndex,
-            PS3000A_RATIO_MODE mode)
+            PS3000A_RATIO_MODE mode) nogil
     
     PICO_STATUS ps3000aSetDataBuffers(
             short handle,
@@ -456,22 +456,22 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             short * bufferMin,
             long bufferLth,
             unsigned short segmentIndex,
-            PS3000A_RATIO_MODE mode)
+            PS3000A_RATIO_MODE mode) nogil
     
     PICO_STATUS ps3000aSetEtsTimeBuffer(
             short handle,
             int64_t * buffer,
-            long bufferLth)
+            long bufferLth) nogil
     
     PICO_STATUS ps3000aSetEtsTimeBuffers(
             short handle,
             unsigned long * timeUpper,
             unsigned long * timeLower,
-            long bufferLth)
+            long bufferLth) nogil
     
     PICO_STATUS ps3000aIsReady(
             short handle,
-            short * ready)
+            short * ready) nogil
     
     PICO_STATUS ps3000aRunBlock(
             short handle,
@@ -482,7 +482,7 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             long * timeIndisposedMs,
             unsigned short segmentIndex,
             ps3000aBlockReady lpReady,
-            void * pParameter)
+            void * pParameter) nogil
     
     PICO_STATUS ps3000aRunStreaming(
             short handle,
@@ -493,23 +493,23 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             short autoStop,
             unsigned long downSampleRatio,
             PS3000A_RATIO_MODE downSampleRatioMode,
-            unsigned long overviewBufferSize)
+            unsigned long overviewBufferSize) nogil
     
     PICO_STATUS ps3000aGetStreamingLatestValues(
             short handle, 
             ps3000aStreamingReady lpPs3000aReady,
-            void * pParameter) 
+            void * pParameter) nogil 
     
     PICO_STATUS ps3000aNoOfStreamingValues(
             short handle,
-            unsigned long * noOfValues)
+            unsigned long * noOfValues) nogil
     
     PICO_STATUS ps3000aGetMaxDownSampleRatio(
             short handle,
             unsigned long noOfUnaggreatedSamples,
             unsigned long * maxDownSampleRatio,
             PS3000A_RATIO_MODE downSampleRatioMode,
-            unsigned short segmentIndex)
+            unsigned short segmentIndex) nogil
     
     PICO_STATUS ps3000aGetValues(
             short handle,
@@ -518,7 +518,7 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             unsigned long downSampleRatio,
             PS3000A_RATIO_MODE downSampleRatioMode,
             unsigned short segmentIndex,
-            short * overflow)
+            short * overflow) nogil
     
     PICO_STATUS ps3000aGetValuesBulk(
             short handle,
@@ -527,7 +527,7 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             unsigned short toSegmentIndex,
             unsigned long downSampleRatio,
             PS3000A_RATIO_MODE downSampleRatioMode,
-            short * overflow)
+            short * overflow) nogil
     
     PICO_STATUS ps3000aGetValuesAsync(
             short handle,
@@ -537,7 +537,7 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             short downSampleRatioMode,
             unsigned short segmentIndex,
             void * lpDataReady,
-            void * pParameter)
+            void * pParameter) nogil
     
     PICO_STATUS ps3000aGetValuesOverlapped(
             short handle,
@@ -546,7 +546,7 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             unsigned long downSampleRatio,
             PS3000A_RATIO_MODE downSampleRatioMode,
             unsigned short segmentIndex,
-            short * overflow)
+            short * overflow) nogil
     
     PICO_STATUS ps3000aGetValuesOverlappedBulk(
             short handle,
@@ -556,15 +556,15 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             PS3000A_RATIO_MODE downSampleRatioMode,
             unsigned short fromSegmentIndex,
             unsigned short toSegmentIndex,
-            short * overflow)
+            short * overflow) nogil
     
     PICO_STATUS ps3000aStop(
-            short handle)
+            short handle) nogil
     
     PICO_STATUS ps3000aHoldOff(
             short handle, 
             uint64_t holdoff,
-            PS3000A_HOLDOFF_TYPE type)
+            PS3000A_HOLDOFF_TYPE type) nogil
     
     PICO_STATUS ps3000aGetChannelInformation(
             short handle, 
@@ -572,32 +572,32 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
             int probe, 
             int * ranges,
             int * length,
-            int channels)
+            int channels) nogil
     
     PICO_STATUS ps3000aEnumerateUnits(
             short * count,
             char * serials,
-            short * serialLth)
+            short * serialLth) nogil
     
     PICO_STATUS ps3000aPingUnit(
-            short handle)
+            short handle) nogil
     
     PICO_STATUS ps3000aMaximumValue(
             short handle,
-            short * value)
+            short * value) nogil
     
     PICO_STATUS ps3000aMinimumValue(
             short handle,
-            short * value)
+            short * value) nogil
     
     PICO_STATUS ps3000aGetAnalogueOffset(
             short handle, 
             PS3000A_RANGE range,
             PS3000A_COUPLING coupling,
             float * maximumVoltage,
-            float * minimumVoltage)
+            float * minimumVoltage) nogil
     
     PICO_STATUS ps3000aGetMaxSegments(
             short handle,
-            unsigned short * maxSegments)
+            unsigned short * maxSegments) nogil
     

@@ -31,6 +31,7 @@ import time
 from math import copysign
 
 from libc.stdlib cimport malloc, free
+from libc.stdio cimport printf
 
 import numpy as np
 cimport numpy as np
@@ -119,7 +120,7 @@ trigger_state_dict = frozendict({
     True: PS3000A_CONDITION_TRUE,
     False: PS3000A_CONDITION_FALSE,})
 
-trigger_condition_offset = frozendict({
+channel_enumeration = frozendict({
     'A': 0,
     'B': 1,
     'C': 2,
@@ -145,18 +146,23 @@ default_pwq_properties = frozendict({
 
 
 cdef open_unit(char *serial_str):
+    cdef PICO_STATUS status
     cdef short handle
 
-    status = ps3000aOpenUnit(&handle, serial_str)
+    with nogil:
+        status = ps3000aOpenUnit(&handle, serial_str)
     check_status(status)
 
     serial = get_unit_info(handle, pico_status.PICO_BATCH_AND_SERIAL)
 
     return handle
 
-cdef close_unit(handle):
+cdef close_unit(short handle):
+    cdef PICO_STATUS status
     
-    status = ps3000aCloseUnit(handle)
+    with nogil:
+        status = ps3000aCloseUnit(handle)
+
     check_status(status)
 
 
@@ -170,7 +176,8 @@ cdef get_unit_info(short handle, PICO_INFO info):
     
     cdef PICO_STATUS status
 
-    status = ps3000aGetUnitInfo(handle, info_str, n, &required_n, info)
+    with nogil:
+        status = ps3000aGetUnitInfo(handle, info_str, n, &required_n, info)
     check_status(status)
     
     # Make sure we had a big enough string
@@ -179,7 +186,9 @@ cdef get_unit_info(short handle, PICO_INFO info):
         n = required_n
         info_str = <char *>malloc(sizeof(char)*(n))
         
-        status = ps3000aGetUnitInfo(handle, info_str, n, &required_n, info)
+        with nogil:
+            status = ps3000aGetUnitInfo(
+                    handle, info_str, n, &required_n, info)
         check_status(status)
 
     try:
@@ -189,14 +198,18 @@ cdef get_unit_info(short handle, PICO_INFO info):
 
     return py_info_str
 
-cdef set_channel(short handle, channel, bint enable, voltage_range, channel_type,
-        float analogue_offset):
+cdef set_channel(short handle, channel, bint enable, 
+        voltage_range, channel_type, float analogue_offset):
 
     cdef PICO_STATUS status
+    cdef short _enable = enable
+    cdef PS3000A_CHANNEL _channel = channel_dict[channel]
+    cdef PS3000A_COUPLING _channel_type = channel_type_dict[channel_type]
+    cdef PS3000A_RANGE _voltage_range = voltage_range_dict[voltage_range]
 
-    status = ps3000aSetChannel(handle, channel_dict[channel], enable,
-            channel_type_dict[channel_type], voltage_range_dict[voltage_range],
-            analogue_offset)
+    with nogil:
+        status = ps3000aSetChannel(handle, _channel, _enable,
+                _channel_type, _voltage_range, analogue_offset)
 
     check_status(status)
 
@@ -207,8 +220,9 @@ cdef get_timebase(short handle, unsigned long timebase_index,
     cdef long max_samples
     cdef PICO_STATUS status
 
-    status = ps3000aGetTimebase2(handle, timebase_index, no_samples, 
-            &time_interval, oversample, &max_samples, segment_index)
+    with nogil:
+        status = ps3000aGetTimebase2(handle, timebase_index, no_samples, 
+                &time_interval, oversample, &max_samples, segment_index)
 
     check_status(status)
 
@@ -273,32 +287,136 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
     
     cdef long time_indisposed_ms
 
-    status = ps3000aRunBlock(handle, no_of_pretrigger_samples, 
-            no_of_posttrigger_samples, timebase_index, oversample,
-            &time_indisposed_ms, segment_index, NULL, NULL)
+    with nogil:
+        status = ps3000aRunBlock(handle, no_of_pretrigger_samples, 
+                no_of_posttrigger_samples, timebase_index, oversample,
+                &time_indisposed_ms, segment_index, NULL, NULL)
 
     check_status(status)
     cdef short finished = 0
 
     if blocking:
-        # Sleep for the time it was expected to take
+        # Sleep for the time it was expected to take (of course, this
+        # doesn't factor in the trigger time).
         time.sleep(time_indisposed_ms * 1e-3)
 
         while True:
-            status = ps3000aIsReady(handle, &finished)
+            with nogil:
+                status = ps3000aIsReady(handle, &finished)
+
             check_status(status)
 
             if finished:
                 break
             
-            # Sleep for another microsecond
-            time.sleep(1e-6)
+            # Sleep for another few microseconds
+            time.sleep(10e-6)
 
-cdef setup_trigger_conditions(handle, logic_sop, logic_variables):
+cdef setup_arrays(short handle, channels, samples):
+    
+    cdef PICO_STATUS status
+    cdef PS3000A_CHANNEL _channel
+    cdef short * _buffer
+    cdef long _samples = samples
+    cdef unsigned short segment_index = 0
+
+    n_channels = len(channels)
+
+    full_array = np.zeros((n_channels, samples), dtype='int16')
+    
+    data_dict = {}
+
+    for n, channel in enumerate(channels):
+
+        channel_array = full_array[n, :]
+        _channel = channel_dict[channel]
+        _buffer = <short *>np.PyArray_DATA(channel_array)
+
+        with nogil:
+            status = ps3000aSetDataBuffer(handle, _channel, _buffer, 
+                    _samples, segment_index, PS3000A_RATIO_MODE_NONE)
+
+        check_status(status)
+
+        data_dict[channel] = channel_array
+
+    return channel_array
+
+
+cdef get_data(short handle, channels, samples):
+    '''Get the data associated with the given channels, and return a
+    tuple containing a dictionary of samples length numpy arrays (as
+    the first element) and a dictionary of bools indicating whether
+    the scope channel overflowed during the capture.
+
+    Each channel is a view into an N x samples length block of memory,
+    where N is the number of channels.
+
+    What is returned is a tuple with first ele
+    '''
+    
+    cdef PICO_STATUS status
+    cdef PS3000A_CHANNEL _channel
+    cdef short * _buffer
+    cdef long _samples = samples
+    cdef unsigned short segment_index = 0
+
+    n_channels = len(channels)
+
+    full_array = np.zeros((n_channels, samples), dtype='int16')
+    
+    data_dict = {}
+
+    for n, channel in enumerate(channels):
+
+        channel_array = full_array[n, :]
+        _channel = channel_dict[channel]
+        _buffer = <short *>np.PyArray_DATA(channel_array)
+
+        with nogil:
+            status = ps3000aSetDataBuffer(handle, _channel, _buffer, 
+                    _samples, segment_index, PS3000A_RATIO_MODE_NONE)
+
+        check_status(status)
+
+        data_dict[channel] = channel_array
+        
+    
+    cdef unsigned long start_index = 0
+    cdef unsigned long downsample_factor = 1
+    cdef short overflow
+
+    cdef unsigned long n_samples = samples
+
+    with nogil:
+        status = ps3000aGetValues(handle, start_index, &n_samples, 
+                downsample_factor, PS3000A_RATIO_MODE_NONE, segment_index,
+                &overflow)
+
+    check_status(status)
+
+    if not n_samples == samples:
+        raise IOError('The expected number of samples were not returned.')
+
+    overflow_dict = {}
+    for channel in channels:
+        overflow_dict[channel] = bool(
+                1 << channel_enumeration[channel] & overflow)
+
+    return (data_dict, overflow_dict)
+
+cdef stop_scope(short handle):
+
+    with nogil:
+        status = ps3000aStop(handle)
+
+    check_status(status)
+
+cdef setup_trigger_conditions(short handle, logic_sop, logic_variables):
     '''Setup the trigger conditions from a sum of products and a list
     of the corresponding logic variables.
     '''
-    n_conditions = len(logic_sop)
+    cdef short n_conditions = len(logic_sop)
 
     cdef PS3000A_TRIGGER_CONDITIONS *trigger_conditions
 
@@ -309,25 +427,27 @@ cdef setup_trigger_conditions(handle, logic_sop, logic_variables):
 
         trigger_state = <PS3000A_TRIGGER_STATE *>&trigger_conditions[n]
 
-        for each_channel in trigger_condition_offset:
+        for each_channel in channel_enumeration:
 
             if each_channel in logic_variables:
 
                 channel_index = logic_variables.index(each_channel)
 
-                trigger_state[trigger_condition_offset[each_channel]] = (
+                trigger_state[channel_enumeration[each_channel]] = (
                         trigger_state_dict[products[channel_index]])
             else:
-                trigger_state[trigger_condition_offset[each_channel]] = (
+                trigger_state[channel_enumeration[each_channel]] = (
                         trigger_state_dict[None])
 
-    status = ps3000aSetTriggerChannelConditions(handle, 
-            trigger_conditions, n_conditions)
+    with nogil:
+        status = ps3000aSetTriggerChannelConditions(handle, 
+                trigger_conditions, n_conditions)
     
     free(trigger_conditions)
     check_status(status)
 
-cdef setup_trigger_directions(handle, trigger):
+
+cdef setup_trigger_directions(short handle, trigger):
 
     directions = {}
     for channel in ['A', 'B', 'C', 'D', 'ext', 'aux']:
@@ -336,19 +456,27 @@ cdef setup_trigger_directions(handle, trigger):
         else:
             directions[channel] = threshold_direction_dict[None]
     
-    status = ps3000aSetTriggerChannelDirections(
-            handle,
-            directions['A'],
-            directions['B'],
-            directions['C'],
-            directions['D'],
-            directions['ext'],
-            directions['aux'])
+    cdef PS3000A_THRESHOLD_DIRECTION _directions[6]
+
+    for channel in ('A', 'B', 'C', 'D', 'ext', 'aux'):
+        _directions[channel_enumeration[channel]] = directions[channel]
+
+    with nogil:
+        status = ps3000aSetTriggerChannelDirections(
+                handle,
+                _directions[0],
+                _directions[1],
+                _directions[2],
+                _directions[3],
+                _directions[4],
+                _directions[5])
 
     check_status(status)
 
-cdef setup_trigger_properties(handle, trigger, channel_states, 
+cdef setup_trigger_properties(short handle, trigger, channel_states, 
         long autotrigger_timeout_ms):
+
+    cdef PICO_STATUS status
 
     # We need to work out the channels we actually have enough info
     # to use (these are also the only channels it's necessary to use)
@@ -357,7 +485,7 @@ cdef setup_trigger_properties(handle, trigger, channel_states,
         if trigger[channel] is not None:
             channels.append(channel)
 
-    n_properties = len(channels)
+    cdef short n_properties = len(channels)
 
     cdef PS3000A_TRIGGER_CHANNEL_PROPERTIES *trigger_properties
     trigger_properties = <PS3000A_TRIGGER_CHANNEL_PROPERTIES *>malloc(
@@ -366,10 +494,12 @@ cdef setup_trigger_properties(handle, trigger, channel_states,
     cdef short min_val
     cdef short max_val
 
-    status = ps3000aMinimumValue(handle, &min_val)
+    with nogil:
+        status = ps3000aMinimumValue(handle, &min_val)
     check_status(status)
 
-    status = ps3000aMaximumValue(handle, &max_val)
+    with nogil:
+        status = ps3000aMaximumValue(handle, &max_val)
     check_status(status)
 
     for n, channel in enumerate(channels):
@@ -410,18 +540,22 @@ cdef setup_trigger_properties(handle, trigger, channel_states,
         trigger_properties[n].thresholdMode = (
                 trigger[channel]['threshold_mode'])
 
-    status = ps3000aSetTriggerChannelProperties(handle, 
-            trigger_properties, n_properties, 0, autotrigger_timeout_ms)
+    with nogil:
+        status = ps3000aSetTriggerChannelProperties(handle, 
+                trigger_properties, n_properties, 0, autotrigger_timeout_ms)
 
     free(trigger_properties)
     check_status(status)    
 
-cdef setup_pulse_width_qualifier(handle, trigger, float sampling_period):
+cdef setup_pulse_width_qualifier(short handle, trigger, 
+        float sampling_period):
+
+    cdef PICO_STATUS status
 
     #Firstly, get the pulse width qualifier
     pwq = trigger['PWQ']
     logic_variables, pwq_logic = pwq['PWQ_logic']
-    n_conditions = len(pwq_logic)
+    cdef short n_conditions = len(pwq_logic)
 
     cdef PS3000A_PWQ_CONDITIONS *pwq_conditions
 
@@ -433,25 +567,28 @@ cdef setup_pulse_width_qualifier(handle, trigger, float sampling_period):
 
         trigger_state = <PS3000A_TRIGGER_STATE *>&pwq_conditions[n]
 
-        for each_channel in trigger_condition_offset:
+        for each_channel in channel_enumeration:
 
             if each_channel in logic_variables:
 
                 channel_index = logic_variables.index(each_channel)
 
-                trigger_state[trigger_condition_offset[each_channel]] = (
+                trigger_state[channel_enumeration[each_channel]] = (
                         trigger_state_dict[products[channel_index]])
             else:
-                trigger_state[trigger_condition_offset[each_channel]] = (
+                trigger_state[channel_enumeration[each_channel]] = (
                         trigger_state_dict[None])
 
-    PWQ_direction = pwq['PWQ_direction']
-    PWQ_lower = int(round(pwq['PWQ_lower']/sampling_period))
-    PWQ_upper = int(round(pwq['PWQ_upper']/sampling_period))
-    PWQ_type = pwq['PWQ_type']
+    cdef PS3000A_THRESHOLD_DIRECTION PWQ_direction = pwq['PWQ_direction']
+    cdef unsigned long PWQ_lower = int(
+            round(pwq['PWQ_lower']/sampling_period))
+    cdef unsigned long PWQ_upper = int(
+            round(pwq['PWQ_upper']/sampling_period))
+    cdef PS3000A_PULSE_WIDTH_TYPE PWQ_type = pwq['PWQ_type']
 
-    status = ps3000aSetPulseWidthQualifier(handle, pwq_conditions, 
-            n_conditions, PWQ_direction, PWQ_lower, PWQ_upper, PWQ_type)
+    with nogil:
+        status = ps3000aSetPulseWidthQualifier(handle, pwq_conditions, 
+                n_conditions, PWQ_direction, PWQ_lower, PWQ_upper, PWQ_type)
 
     free(pwq_conditions)
     check_status(status)    
@@ -478,15 +615,16 @@ cdef setup_trigger(handle, trigger, channel_states,
 cpdef get_units():
     '''Return a list of the serial numbers of the connected units.
     '''
+    cdef PICO_STATUS status
+
     cdef short n = 200
     cdef char* serial_str = <char *>malloc(sizeof(char)*(n))
     cdef short count
 
     cdef bytes py_serial_str
     
-    cdef PICO_STATUS status
-
-    status = ps3000aEnumerateUnits(&count, serial_str, &n)
+    with nogil:
+        status = ps3000aEnumerateUnits(&count, serial_str, &n)
 
     if status != pico_status.PICO_OK:
         raise IOError
@@ -654,14 +792,15 @@ cdef class Pico3k:
 
         return info
 
-    def configure_channel(self, channel, enable=True, voltage_range='20V', 
+    def configure_channel(self, channel, enable=True, voltage_range='5V', 
             channel_type='DC', offset=0.0):
 
         set_channel(self.__handle, channel, enable, voltage_range, 
                 channel_type, offset)
 
-        self.__channel_states[channel] = (voltage_range_values[
-                voltage_range_dict[voltage_range]],)
+        self.__channel_states[channel] = (
+                voltage_range_values[voltage_range_dict[voltage_range]],
+                enable)
 
 
     def set_trigger(self, trigger_object):
@@ -917,7 +1056,7 @@ cdef class Pico3k:
 
     def capture_block(self, sampling_period, post_trigger_samples, 
             pre_trigger_samples=0, oversample=1, 
-            autotrigger_timeout=None):
+            autotrigger_timeout=None, return_scaled_array=True):
         '''Capture a block of data.
 
         The actual sampling period is adjusted to fit a nearest valid
@@ -931,6 +1070,10 @@ cdef class Pico3k:
         autotrigger_timeout is the number of seconds before the trigger 
         should fire automatically. Setting this to None or 0 means the 
         trigger will never fire automatically.
+
+        If return_scaled_array is set to False, the raw data is
+        returned without scaling it to the voltage range for each
+        channel.
         '''
         
         cdef unsigned long timebase_index
@@ -942,7 +1085,9 @@ cdef class Pico3k:
         valid_sampling_period, max_samples = self.get_valid_sampling_period(
                 sampling_period, oversample)
 
-        if post_trigger_samples + pre_trigger_samples > max_samples:
+        n_samples = post_trigger_samples + pre_trigger_samples
+
+        if n_samples > max_samples:
             raise PicoError(pico_status.PICO_TOO_MANY_SAMPLES)
         
         timebase_index = compute_timebase_index(valid_sampling_period, 
@@ -965,9 +1110,26 @@ cdef class Pico3k:
         setup_trigger(self.__handle, self.__trigger, self.__channel_states,
                 sampling_period, autotrigger_timeout_ms)
 
-        oversample = 1
         segment_index = 0
 
-        #run_block(self.__handle, pre_trigger_samples, post_trigger_samples,
-        #        timebase_index, oversample, segment_index)
+        run_block(self.__handle, pre_trigger_samples, post_trigger_samples,
+                timebase_index, oversample, segment_index)
+
+        data_channels = set()
+        for channel in self.__channel_states:
+            if self.__channel_states[channel][1]:
+                data_channels.add(channel)
+
+        data, overflow = get_data(self.__handle, data_channels, n_samples)
+
+        stop_scope(self.__handle)
+
+        if return_scaled_array:
+            for channel in data:
+                channel_scaling = ( 
+                        self.__channel_states[channel][0]/2**15)
+                scaled_channel_data = data[channel] * channel_scaling
+                data[channel] = scaled_channel_data
+
+        return (data, overflow)
 
