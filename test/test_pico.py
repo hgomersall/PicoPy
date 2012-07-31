@@ -1,4 +1,24 @@
 #!/usr/bin/env python
+#
+# Copyright 2012 Knowledge Economy Developments Ltd
+#
+# Henry Gomersall
+# heng@kedevelopments.co.uk
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+# 
 
 import unittest
 
@@ -7,6 +27,7 @@ import picopy.pico_status as status
 
 import copy
 import math
+import time
 
 pico = picopy.Pico3k()
 
@@ -22,7 +43,8 @@ class Pico3kTest(unittest.TestCase):
             picopy.Pico3k(pico.get_hardware_info()['serial_string'])
 
     def test_delete_and_reinit(self):
-
+        # sleep for a second to let things settle down
+        time.sleep(1)
         global pico
         pico = None
         pico = picopy.Pico3k()
@@ -112,6 +134,18 @@ class Pico3kTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     pico.set_trigger(trigger_object)
 
+    def test_set_trigger_invalid_negative_hysteresis(self):
+
+        for each_key in ['upper_hysteresis', 'lower_hysteresis']:
+            trigger = dict(picopy.pico3k.default_trigger_properties)
+            
+            trigger[each_key] = -5.0
+
+            trigger_object = {'A': trigger, 'logic_function': 'A'}
+
+            with self.assertRaisesRegexp(ValueError, 'Negative hysteresis'):
+                pico.set_trigger(trigger_object)
+
     def test_set_pwq_invalid_value(self):
         
         trigger = dict(picopy.pico3k.default_trigger_properties)
@@ -137,6 +171,21 @@ class Pico3kTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     pico.set_trigger(trigger_object)
 
+    def test_set_pwq_invalid_value(self):
+        
+        trigger = dict(picopy.pico3k.default_trigger_properties)
+        for each_key in ('PWQ_upper', 'PWQ_lower'):
+            pwq = dict(picopy.pico3k.default_pwq_properties)
+            
+            pwq[each_key] = -10
+
+            trigger_object = {
+                    'A': trigger, 'logic_function': 'A or PWQ',
+                    'PWQ': pwq}
+
+            with self.assertRaisesRegexp(ValueError, 
+                    'Negative pulse width times'):
+                pico.set_trigger(trigger_object)
 
     def test_set_trigger_float_coercian(self):
 
@@ -224,10 +273,16 @@ class Pico3kTest(unittest.TestCase):
             self.assertAlmostEqual(valid_period, test_valid_period, 
                     places=3)
 
-    def test_get_valid_sampling_period_invalid_arg(self):
+    def test_get_valid_sampling_period_invalid_args(self):
 
         with self.assertRaises(TypeError):
             pico.get_valid_sampling_period('sdfsdfsdf')
+
+        with self.assertRaisesRegexp(ValueError, 'Value out of range'):
+            pico.get_valid_sampling_period(1e-7, 256)
+
+        with self.assertRaisesRegexp(ValueError, 'Value out of range'):
+            pico.get_valid_sampling_period(1e-7, 0)
 
     def test_block_capture_with_too_many_samples(self):
 
@@ -235,4 +290,24 @@ class Pico3kTest(unittest.TestCase):
                 'PICO_TOO_MANY_SAMPLES'):
 
             pico.capture_block(4e-9, 10e10)
+
+    def test_block_capture_with_invalid_oversample(self):
+
+        with self.assertRaisesRegexp(ValueError, 'Value out of range'):
+            pico.capture_block(4e-9, 1024, oversample=0)
+
+        with self.assertRaisesRegexp(ValueError, 'Value out of range'):
+            pico.capture_block(4e-9, 1024, oversample=256)
+
+    def test_block_capture_with_invalid_timeout(self):
+
+        with self.assertRaisesRegexp(ValueError, 
+                'Invalid timeout'):
+
+            pico.capture_block(4e-9, 1024, autotrigger_timeout=-10)
+            pico.capture_block(4e-9, 1024, autotrigger_timeout=2**32)
+
+    def test_block_capture_with_timeout(self):
+
+        pico.capture_block(4e-9, 1024)
 

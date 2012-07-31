@@ -3,17 +3,20 @@
 # Henry Gomersall
 # heng@kedevelopments.co.uk
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
 # 
-#    http://www.apache.org/licenses/LICENSE-2.0
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
 # 
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+# 
 
 from pico_status cimport check_status
 from pico_status import PicoError
@@ -25,6 +28,7 @@ from frozendict import frozendict
 import copy
 import math
 import time
+from math import copysign
 
 from libc.stdlib cimport malloc, free
 
@@ -32,104 +36,112 @@ import numpy as np
 cimport numpy as np
 
 capability_dict = frozendict({
-        '3204A': frozendict({'channels': 2, 'max_sampling_rate': 5e8}),
-        '3204B': frozendict({'channels': 2, 'max_sampling_rate': 5e8}),
-        '3205A': frozendict({'channels': 2, 'max_sampling_rate': 5e8}),
-        '3205B': frozendict({'channels': 2, 'max_sampling_rate': 5e8}),
-        '3206A': frozendict({'channels': 2, 'max_sampling_rate': 5e8}),
-        '3206B': frozendict({'channels': 2, 'max_sampling_rate': 5e8}),
-        '3404A': frozendict({'channels': 4, 'max_sampling_rate': 1e9}),
-        '3404B': frozendict({'channels': 4, 'max_sampling_rate': 1e9}),
-        '3405A': frozendict({'channels': 4, 'max_sampling_rate': 1e9}),
-        '3405B': frozendict({'channels': 4, 'max_sampling_rate': 1e9}),
-        '3406A': frozendict({'channels': 4, 'max_sampling_rate': 1e9}),
-        '3406B': frozendict({'channels': 4, 'max_sampling_rate': 1e9})})
+    '3204A': frozendict({'channels': 2, 'max_sampling_rate': 5e8}),
+    '3204B': frozendict({'channels': 2, 'max_sampling_rate': 5e8}),
+    '3205A': frozendict({'channels': 2, 'max_sampling_rate': 5e8}),
+    '3205B': frozendict({'channels': 2, 'max_sampling_rate': 5e8}),
+    '3206A': frozendict({'channels': 2, 'max_sampling_rate': 5e8}),
+    '3206B': frozendict({'channels': 2, 'max_sampling_rate': 5e8}),
+    '3404A': frozendict({'channels': 4, 'max_sampling_rate': 1e9}),
+    '3404B': frozendict({'channels': 4, 'max_sampling_rate': 1e9}),
+    '3405A': frozendict({'channels': 4, 'max_sampling_rate': 1e9}),
+    '3405B': frozendict({'channels': 4, 'max_sampling_rate': 1e9}),
+    '3406A': frozendict({'channels': 4, 'max_sampling_rate': 1e9}),
+    '3406B': frozendict({'channels': 4, 'max_sampling_rate': 1e9})})
 
 channel_dict = frozendict({
-        'A': PS3000A_CHANNEL_A,
-        'B': PS3000A_CHANNEL_B,
-        'C': PS3000A_CHANNEL_C,
-        'D': PS3000A_CHANNEL_D})
+    'A': PS3000A_CHANNEL_A,
+    'B': PS3000A_CHANNEL_B,
+    'C': PS3000A_CHANNEL_C,
+    'D': PS3000A_CHANNEL_D,
+    'ext': PS3000A_EXTERNAL,
+    'aux': PS3000A_TRIGGER_AUX,
+    })
 
 channel_type_dict = frozendict({
-        'AC': PS3000A_AC,
-        'DC': PS3000A_DC})
+    'AC': PS3000A_AC,
+    'DC': PS3000A_DC})
 
 voltage_range_dict = frozendict({
-        '50mV': PS3000A_50MV,
-        '100mV': PS3000A_100MV,
-        '200mV': PS3000A_200MV,
-        '500mV': PS3000A_500MV,
-        '1V': PS3000A_1V,
-        '2V': PS3000A_2V,
-        '5V': PS3000A_5V,
-        '10V': PS3000A_10V,
-        '20V': PS3000A_20V})
+    '50mV': PS3000A_50MV,
+    '100mV': PS3000A_100MV,
+    '200mV': PS3000A_200MV,
+    '500mV': PS3000A_500MV,
+    '1V': PS3000A_1V,
+    '2V': PS3000A_2V,
+    '5V': PS3000A_5V,
+    '10V': PS3000A_10V,
+    '20V': PS3000A_20V})
+
+voltage_range_values = frozendict({
+    PS3000A_50MV: 50e-3,
+    PS3000A_100MV: 100e-3,
+    PS3000A_200MV: 500e-3,
+    PS3000A_1V: 1.0,
+    PS3000A_2V: 2.0,
+    PS3000A_5V: 5.0,
+    PS3000A_10V: 10.0,
+    PS3000A_20V: 20.0})
 
 threshold_direction_dict = frozendict({
-        'ABOVE': PS3000A_ABOVE,
-        'ABOVE_LOWER': PS3000A_ABOVE_LOWER,
-        'BELOW': PS3000A_BELOW,
-        'BELOW_LOWER': PS3000A_BELOW_LOWER,
-        'RISING': PS3000A_RISING,
-        'RISING_LOWER': PS3000A_RISING_LOWER,
-        'FALLING': PS3000A_FALLING,
-        'FALLING_LOWER': PS3000A_FALLING_LOWER,
-        'RISING_OR_FALLING': PS3000A_RISING_OR_FALLING,
-        'INSIDE': PS3000A_INSIDE,
-        'OUTSIDE': PS3000A_OUTSIDE,
-        'ENTER': PS3000A_ENTER,
-        'EXIT': PS3000A_EXIT,
-        'ENTER_OR_EXIT': PS3000A_ENTER_OR_EXIT,
-        'POSITIVE_RUNT': PS3000A_POSITIVE_RUNT,
-        'NEGATIVE_RUNT': PS3000A_NEGATIVE_RUNT,
-        'NONE': PS3000A_NONE})
+    'ABOVE': PS3000A_ABOVE,
+    'ABOVE_LOWER': PS3000A_ABOVE_LOWER,
+    'BELOW': PS3000A_BELOW,
+    'BELOW_LOWER': PS3000A_BELOW_LOWER,
+    'RISING': PS3000A_RISING,
+    'RISING_LOWER': PS3000A_RISING_LOWER,
+    'FALLING': PS3000A_FALLING,
+    'FALLING_LOWER': PS3000A_FALLING_LOWER,
+    'RISING_OR_FALLING': PS3000A_RISING_OR_FALLING,
+    'INSIDE': PS3000A_INSIDE,
+    'OUTSIDE': PS3000A_OUTSIDE,
+    'ENTER': PS3000A_ENTER,
+    'EXIT': PS3000A_EXIT,
+    'ENTER_OR_EXIT': PS3000A_ENTER_OR_EXIT,
+    'POSITIVE_RUNT': PS3000A_POSITIVE_RUNT,
+    'NEGATIVE_RUNT': PS3000A_NEGATIVE_RUNT,
+    'NONE': PS3000A_NONE,
+    None: PS3000A_NONE,})
 
 threshold_mode_dict = frozendict({
-        'LEVEL': PS3000A_LEVEL,
-        'WINDOW': PS3000A_WINDOW})
+    'LEVEL': PS3000A_LEVEL,
+    'WINDOW': PS3000A_WINDOW})
 
 PWQ_type_dict = frozendict({
-        'NONE': PS3000A_PW_TYPE_NONE,
-        'GREATER_THAN': PS3000A_PW_TYPE_GREATER_THAN,
-        'LESS_THAN': PS3000A_PW_TYPE_LESS_THAN,
-        'IN_RANGE': PS3000A_PW_TYPE_IN_RANGE,
-        'OUT_OF_RANGE': PS3000A_PW_TYPE_OUT_OF_RANGE})
+    'NONE': PS3000A_PW_TYPE_NONE,
+    'GREATER_THAN': PS3000A_PW_TYPE_GREATER_THAN,
+    'LESS_THAN': PS3000A_PW_TYPE_LESS_THAN,
+    'IN_RANGE': PS3000A_PW_TYPE_IN_RANGE,
+    'OUT_OF_RANGE': PS3000A_PW_TYPE_OUT_OF_RANGE})
+
+trigger_state_dict = frozendict({
+    None: PS3000A_CONDITION_DONT_CARE,
+    True: PS3000A_CONDITION_TRUE,
+    False: PS3000A_CONDITION_FALSE,})
+
+trigger_condition_offset = frozendict({
+    'A': 0,
+    'B': 1,
+    'C': 2,
+    'D': 3,
+    'ext': 4,
+    'aux': 5,
+    'PWQ': 6,})
 
 default_trigger_properties = frozendict({
-        'upper_threshold': 0.0,
-        'upper_hysteresis': 0.0,
-        'lower_threshold': 0.0,
-        'lower_hysteresis': 0.0,
-        'threshold_mode': 'LEVEL',
-        'trigger_direction': 'NONE',})
+    'upper_threshold': 0.0,
+    'upper_hysteresis': 0.0,
+    'lower_threshold': 0.0,
+    'lower_hysteresis': 0.0,
+    'threshold_mode': 'LEVEL',
+    'trigger_direction': 'NONE',})
 
 default_pwq_properties = frozendict({
-        'PWQ_logic': '',
-        'PWQ_lower': 0.0,
-        'PWQ_upper': 0.0,
-        'PWQ_type': 'NONE',
-        'PWQ_direction': 'NONE',})
-
-
-channel_property_dtype = np.dtype([
-    ('thresholdUpper', np.int16),
-    ('thresholdUpperHysteresis', np.uint16),
-    ('thresholdLower', np.int16),
-    ('thresholdLowerHysteresis', np.uint16),
-    ('channel', np.dtype('u%i' % (sizeof(PS3000A_CHANNEL)))),
-    ('threshold_mode', np.dtype('u%i' % (sizeof(PS3000A_THRESHOLD_MODE))))])
-
-
-trigger_state_dtype = np.dtype('u%i' % (sizeof(PS3000A_TRIGGER_STATE)))
-trigger_conditions_dtype = np.dtype([
-    ('channelA', trigger_state_dtype),
-    ('channelB', trigger_state_dtype),
-    ('channelC', trigger_state_dtype),
-    ('channelD', trigger_state_dtype),
-    ('external', trigger_state_dtype),
-    ('aux', trigger_state_dtype),
-    ('pulseWidthQualifier', trigger_state_dtype)])
+    'PWQ_logic': '',
+    'PWQ_lower': 0.0,
+    'PWQ_upper': 0.0,
+    'PWQ_type': 'NONE',
+    'PWQ_direction': 'NONE',})
 
 
 cdef open_unit(char *serial_str):
@@ -203,7 +215,8 @@ cdef get_timebase(short handle, unsigned long timebase_index,
     return (time_interval*1e-9, max_samples)
 
 cdef unsigned long compute_timebase_index(
-        float sampling_period, float sampling_rate):
+        float sampling_period, float sampling_rate, 
+        unsigned char oversample):
     '''Round the sampling period to the nearest valid sampling period and
     return the timebase index to which the sampling period corresponds.
 
@@ -214,19 +227,23 @@ cdef unsigned long compute_timebase_index(
     cdef unsigned long timebase_index_low 
     cdef unsigned long timebase_index
 
-    if sampling_period < 1/sampling_rate:
+    # We need to work with a sampling period that has been
+    # scaled by the oversample rate
+    us_sampling_period = sampling_period/oversample
+
+    if us_sampling_period < 1/sampling_rate:
         return 0
 
-    elif sampling_period > (2**32 - 3)/(sampling_rate/8):
+    elif us_sampling_period > (2**32 - 3)/(sampling_rate/8):
         return 2**32 - 1
 
-    elif sampling_period < 8/sampling_rate:
+    elif us_sampling_period < 8/sampling_rate:
         timebase_index_low = int(
-                math.floor(math.log(sampling_period * sampling_rate, 2)))
+                math.floor(math.log(us_sampling_period * sampling_rate, 2)))
 
     else:
         timebase_index_low = int(
-                math.floor(sampling_period * sampling_rate/8 + 2))
+                math.floor(us_sampling_period * sampling_rate/8 + 2))
 
     cdef float mean_sampling_period = 0.0
     cdef int n
@@ -240,7 +257,7 @@ cdef unsigned long compute_timebase_index(
             mean_sampling_period += (
                     (timebase_index_low + n - 2)/(2*sampling_rate/8))
 
-    if sampling_period < mean_sampling_period:
+    if us_sampling_period < mean_sampling_period:
         timebase_index = timebase_index_low
     else:
         timebase_index = timebase_index_low + 1
@@ -277,8 +294,186 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
             # Sleep for another microsecond
             time.sleep(1e-6)
 
-cdef setup_triggers(triggers, trigger_logic):
-    pass
+cdef setup_trigger_conditions(handle, logic_sop, logic_variables):
+    '''Setup the trigger conditions from a sum of products and a list
+    of the corresponding logic variables.
+    '''
+    n_conditions = len(logic_sop)
+
+    cdef PS3000A_TRIGGER_CONDITIONS *trigger_conditions
+
+    trigger_conditions = <PS3000A_TRIGGER_CONDITIONS *>malloc(
+            sizeof(PS3000A_TRIGGER_CONDITIONS) * n_conditions)
+
+    for n, products in enumerate(logic_sop):
+
+        trigger_state = <PS3000A_TRIGGER_STATE *>&trigger_conditions[n]
+
+        for each_channel in trigger_condition_offset:
+
+            if each_channel in logic_variables:
+
+                channel_index = logic_variables.index(each_channel)
+
+                trigger_state[trigger_condition_offset[each_channel]] = (
+                        trigger_state_dict[products[channel_index]])
+            else:
+                trigger_state[trigger_condition_offset[each_channel]] = (
+                        trigger_state_dict[None])
+
+    status = ps3000aSetTriggerChannelConditions(handle, 
+            trigger_conditions, n_conditions)
+    
+    free(trigger_conditions)
+    check_status(status)
+
+cdef setup_trigger_directions(handle, trigger):
+
+    directions = {}
+    for channel in ['A', 'B', 'C', 'D', 'ext', 'aux']:
+        if channel in trigger and trigger[channel] is not None:
+            directions[channel] = trigger[channel]['trigger_direction']
+        else:
+            directions[channel] = threshold_direction_dict[None]
+    
+    status = ps3000aSetTriggerChannelDirections(
+            handle,
+            directions['A'],
+            directions['B'],
+            directions['C'],
+            directions['D'],
+            directions['ext'],
+            directions['aux'])
+
+    check_status(status)
+
+cdef setup_trigger_properties(handle, trigger, channel_states, 
+        long autotrigger_timeout_ms):
+
+    # We need to work out the channels we actually have enough info
+    # to use (these are also the only channels it's necessary to use)
+    channels = []
+    for channel in set.intersection(set(channel_states), set(trigger)):
+        if trigger[channel] is not None:
+            channels.append(channel)
+
+    n_properties = len(channels)
+
+    cdef PS3000A_TRIGGER_CHANNEL_PROPERTIES *trigger_properties
+    trigger_properties = <PS3000A_TRIGGER_CHANNEL_PROPERTIES *>malloc(
+            sizeof(PS3000A_TRIGGER_CHANNEL_PROPERTIES) * n_properties)
+
+    cdef short min_val
+    cdef short max_val
+
+    status = ps3000aMinimumValue(handle, &min_val)
+    check_status(status)
+
+    status = ps3000aMaximumValue(handle, &max_val)
+    check_status(status)
+
+    for n, channel in enumerate(channels):
+        channel_v_range = channel_states[channel][0]
+        ADC_scaling = float(max_val)/channel_v_range
+
+        upper_threshold = int(round(
+            trigger[channel]['upper_threshold'] * ADC_scaling))
+        upper_thld_hyst = int(round(
+            trigger[channel]['upper_hysteresis'] * ADC_scaling))
+        lower_threshold = int(round(
+            trigger[channel]['lower_threshold'] * ADC_scaling))
+        lower_thld_hyst = int(round(
+            trigger[channel]['lower_hysteresis'] * ADC_scaling))
+
+        # ideally:
+        # cap_abs = lambda x: (
+        #    x if abs(x) < max_val else int(copysign(max_val, x)))
+        #
+        # Lambdas aren't possible in cdefs, so we work around that
+        x = upper_threshold
+        trigger_properties[n].thresholdUpper = (
+                x if abs(x) < max_val else int(copysign(max_val, x)))
+
+        x = upper_thld_hyst
+        trigger_properties[n].thresholdUpperHysteresis = (
+                x if abs(x) < max_val else max_val)
+
+        x = lower_threshold
+        trigger_properties[n].thresholdLower = (
+                x if abs(x) < max_val else int(copysign(max_val, x)))
+
+        x = lower_thld_hyst
+        trigger_properties[n].thresholdLowerHysteresis = (
+                x if abs(x) < max_val else max_val)
+
+        trigger_properties[n].channel = channel_dict[channel]
+        trigger_properties[n].thresholdMode = (
+                trigger[channel]['threshold_mode'])
+
+    status = ps3000aSetTriggerChannelProperties(handle, 
+            trigger_properties, n_properties, 0, autotrigger_timeout_ms)
+
+    free(trigger_properties)
+    check_status(status)    
+
+cdef setup_pulse_width_qualifier(handle, trigger, float sampling_period):
+
+    #Firstly, get the pulse width qualifier
+    pwq = trigger['PWQ']
+    logic_variables, pwq_logic = pwq['PWQ_logic']
+    n_conditions = len(pwq_logic)
+
+    cdef PS3000A_PWQ_CONDITIONS *pwq_conditions
+
+    pwq_conditions = <PS3000A_PWQ_CONDITIONS *>malloc(
+            sizeof(PS3000A_PWQ_CONDITIONS) * n_conditions)
+
+    # Copy in the pwq_conditions array from the pwq_logic structure
+    for n, products in enumerate(pwq_logic):
+
+        trigger_state = <PS3000A_TRIGGER_STATE *>&pwq_conditions[n]
+
+        for each_channel in trigger_condition_offset:
+
+            if each_channel in logic_variables:
+
+                channel_index = logic_variables.index(each_channel)
+
+                trigger_state[trigger_condition_offset[each_channel]] = (
+                        trigger_state_dict[products[channel_index]])
+            else:
+                trigger_state[trigger_condition_offset[each_channel]] = (
+                        trigger_state_dict[None])
+
+    PWQ_direction = pwq['PWQ_direction']
+    PWQ_lower = int(round(pwq['PWQ_lower']/sampling_period))
+    PWQ_upper = int(round(pwq['PWQ_upper']/sampling_period))
+    PWQ_type = pwq['PWQ_type']
+
+    status = ps3000aSetPulseWidthQualifier(handle, pwq_conditions, 
+            n_conditions, PWQ_direction, PWQ_lower, PWQ_upper, PWQ_type)
+
+    free(pwq_conditions)
+    check_status(status)    
+
+
+cdef setup_trigger(handle, trigger, channel_states, 
+        float sampling_period, long autotrigger_timeout_ms):
+    
+    # Firstly set up the channel conditions
+
+    logic_variables, logic_sop = trigger['trigger_logic']
+
+    setup_trigger_conditions(handle, logic_sop, logic_variables)
+
+    setup_trigger_directions(handle, trigger)
+
+    setup_trigger_properties(handle, trigger, channel_states, 
+            autotrigger_timeout_ms)
+
+    if trigger['PWQ'] is not None:
+        setup_pulse_width_qualifier(handle, trigger, sampling_period)
+
 
 cpdef get_units():
     '''Return a list of the serial numbers of the connected units.
@@ -329,17 +524,17 @@ cdef class EdgeTrigger:
         else:
             raise KeyError('Invalid channel')
 
-    def __init__(self, channel, direction='RISING', threshold=0.0, 
+    def __init__(self, channel, threshold=0.0, direction='RISING',
             hysteresis=0.0):
         '''Initialise an edge trigger.
 
         channel is the channel to which the trigger should apply.
-
-        direction is one of 'RISING', 'FALLING' or 'RISING_OR_FALLING'.
-        These refer to the signal rising, falling or either.
-
+        
         threshold is a floating point value giving the threshold voltage for
         the edge trigger.
+
+        direction is one of 'RISING', 'FALLING' or 'RISING_OR_FALLING'.
+        These refer to the signal rising, falling or either. 
 
         hysteresis is a positive floating point number. After the signal
         passes the threshold in the given direction, the trigger becomes
@@ -367,8 +562,8 @@ cdef class Pico3k:
     cdef short __handle
 
     cdef object __channels
-    cdef object __triggers
-    cdef object __trigger_logic
+    cdef object __channel_states
+    cdef object __trigger
     cdef object __hardware_variant
     cdef object __max_sampling_rate
     cdef object __serial_string
@@ -404,6 +599,10 @@ cdef class Pico3k:
 
         self.__segment_index = 0
 
+        # __channel_states stores which channels are enabled along
+        # with necessary info about that channel
+        self.__channel_states = {}
+
         channels = []
 
         # Iterate through all channels
@@ -429,7 +628,7 @@ cdef class Pico3k:
 
         self.__channels = tuple(channels)
 
-        self.__triggers = {}
+        self.__trigger = {}
 
         trigger_object = {'logic_function': ''}
 
@@ -461,42 +660,10 @@ cdef class Pico3k:
         set_channel(self.__handle, channel, enable, voltage_range, 
                 channel_type, offset)
 
-    def set_trigger_logic(self, logic_string):
-        '''Set the trigger logic for the scope.
+        self.__channel_states[channel] = (voltage_range_values[
+                voltage_range_dict[voltage_range]],)
 
-        logic_string is a string that describes how the triggers for
-        each of the channels should be combined.
 
-        The string should describe a logical function of the possible
-        trigger channels, which can be 'A', 'B', 'C', 'D', or 'ext' according
-        to the hardware.
-        
-        If a channel is included in the logic string that does not
-        correspond to a valid hardware channel, then picopy.logic.ParseError 
-        is raised.
-
-        The four logical operands that are allowed, in order of precedence, 
-        are:
-        NOT: 'NOT', '~', '!'
-        AND: 'AND', '.', '&'
-        OR: 'OR', '+', '|'
-        XOR: 'XOR'
-
-        The word form of each of the above is not case dependent.
-        
-        Parantheses can be used to explicitly denote precedence.
-
-        An empty string set all the channels to "Don't care". This 
-        effectively turns off triggering.
-
-        Examples:
-        >>> pico3k_instance.set_trigger_logic('A AND NOT B')
-        >>> pico3k_instance.set_trigger_logic('A XOR C')
-        '''
-        self.__trigger_logic = logic.get_minimal_sop_from_string(
-                logic_string, self.__channels)
-
-        
     def set_trigger(self, trigger_object):
         '''Set the trigger with the trigger object, given by trigger_object.
 
@@ -573,11 +740,12 @@ cdef class Pico3k:
 
         logic_variables = self.__channels + ('PWQ',)
 
-        # self.__trigger_logic is a list (sum) of lists (products)
+        # trigger_logic is a list (sum) of lists (products)
         trigger_logic = logic.get_minimal_sop_from_string(
                 trigger_object['logic_function'], logic_variables)
-
-        self.__trigger_logic = (logic_variables, trigger_logic)
+        
+        trigger = {}
+        trigger['trigger_logic'] = (logic_variables, trigger_logic)
 
         # Work out which channels are enabled from the returned
         # logic string. This defines which channels we need to look up.
@@ -590,11 +758,10 @@ cdef class Pico3k:
                 if condition is not None:
                     enabled_logic_variables.add(variable)
 
-        trigger = {}
-
         for channel in self.__channels:
             
             if channel in enabled_logic_variables:
+
                 channel_trigger = {}
                     
                 try:
@@ -623,6 +790,13 @@ cdef class Pico3k:
                                 threshold_direction_dict[property_value])
                     
                     else:
+
+                        float_property_value = float(property_value)
+                        if ('hysteresis' in each_property and 
+                                float_property_value < 0.0):
+                            raise ValueError('Negative hysteresis: ',
+                                    'Hysteresis values should be positive.')
+
                         channel_trigger[each_property] = (
                                 float(property_value))
 
@@ -630,7 +804,7 @@ cdef class Pico3k:
 
             else:
                 trigger[channel] = None
-
+                
         if 'PWQ' in enabled_logic_variables:
 
             pwq_trigger = {}
@@ -658,6 +832,8 @@ cdef class Pico3k:
                             threshold_direction_dict[property_value])
 
                 elif (each_property == 'PWQ_logic'):
+                    # We don't want 'PWQ' to be a variable. This would break
+                    # lots of things!
                     logic_variables = self.__channels
                     
                     pwq_logic = logic.get_minimal_sop_from_string(
@@ -666,18 +842,22 @@ cdef class Pico3k:
                     pwq_trigger[each_property] = (logic_variables, pwq_logic)
                     
                 else:
-                    pwq_trigger[each_property] = (
-                            float(property_value))
+                    float_property_value = float(property_value)
+                    if float_property_value < 0.0:
+                        raise ValueError('Negative pulse width times: '
+                                'The pulse width specifiers must be a '
+                                'positive number of seconds.')
+                    pwq_trigger[each_property] = float_property_value
                     
-            trigger['PWQ'] = channel_trigger
+            trigger['PWQ'] = pwq_trigger
         else:
             trigger['PWQ'] = None
             
 
         # Finally write the trigger dict back to the main triggers dict
-        self.__triggers[channel] = trigger
+        self.__trigger = trigger
 
-    def get_valid_sampling_period(self, sampling_period):
+    def get_valid_sampling_period(self, sampling_period, oversample=1):
         '''Compute the closest valid sampling period to sampling_period 
         given the hardware settings and return a tuple giving the closest
         valid sampling period as a floating point number and the maximum
@@ -686,14 +866,21 @@ cdef class Pico3k:
 
         sampling_period is the the number of seconds between each
         sample.
+
+        oversample is the number of samples that are averaged to
+        return a single sample.
         '''
 
+        if oversample < 1 or oversample > 2**8 - 1:
+            raise ValueError('Value out of range: oversample should be '
+                    'between 1 and %i inclusive.', (2**8 - 1))
+
         cdef unsigned long timebase_index = compute_timebase_index(
-                sampling_period, self.__max_sampling_rate)
+                sampling_period, self.__max_sampling_rate, oversample)
 
         valid_period, max_samples = get_timebase(self.__handle, 
-                timebase_index, 0, 1, 0)
-        
+                timebase_index, 0, oversample, 0)
+
         # Check we are not at the limits of the range
         if not (timebase_index == 0 or timebase_index == 2**32-1):
 
@@ -705,14 +892,14 @@ cdef class Pico3k:
 
                 valid_period_low = valid_period
                 max_samples_low = max_samples
-                valid_period_high, max_samples_high = get_timebase(self.__handle, 
-                    alt_timebase_index, 0, 1, 0)
+                valid_period_high, max_samples_high = get_timebase(
+                        self.__handle, alt_timebase_index, 0, oversample, 0)
 
             else:
                 alt_timebase_index = timebase_index - 1
 
-                valid_period_low, max_samples_low = get_timebase(self.__handle, 
-                    alt_timebase_index, 0, 1, 0)
+                valid_period_low, max_samples_low = get_timebase(
+                        self.__handle, alt_timebase_index, 0, oversample, 0)
 
                 valid_period_high = valid_period
                 max_samples_high = max_samples
@@ -729,27 +916,58 @@ cdef class Pico3k:
         return (valid_period, max_samples)
 
     def capture_block(self, sampling_period, post_trigger_samples, 
-            pre_trigger_samples=0):
+            pre_trigger_samples=0, oversample=1, 
+            autotrigger_timeout=None):
         '''Capture a block of data.
+
+        The actual sampling period is adjusted to fit a nearest valid
+        sampling period that can be found. To know in advance what will
+        be used, call the get_valid_sampling_period method with the same
+        sampling_period and oversample arguments.
+
+        oversample is the number of samples that are averaged to produce
+        a single sample. Clearly this will affect the output sample rate.
+
+        autotrigger_timeout is the number of seconds before the trigger 
+        should fire automatically. Setting this to None or 0 means the 
+        trigger will never fire automatically.
         '''
         
         cdef unsigned long timebase_index
-        
+
+        if oversample < 1 or oversample > 2**8 - 1:
+            raise ValueError('Value out of range: oversample should be '
+                    'between 1 and %i inclusive.', (2**8 - 1))
+
         valid_sampling_period, max_samples = self.get_valid_sampling_period(
-                sampling_period)
+                sampling_period, oversample)
 
         if post_trigger_samples + pre_trigger_samples > max_samples:
             raise PicoError(pico_status.PICO_TOO_MANY_SAMPLES)
         
-        timebase_index = compute_timebase_index(sampling_period, 
-                self.__max_sampling_rate)
+        timebase_index = compute_timebase_index(valid_sampling_period, 
+                self.__max_sampling_rate, oversample)
 
-        setup_triggers(self.__triggers, self.__trigger_logic)
+        if autotrigger_timeout is None:
+            autotrigger_timeout = 0.0
 
-        #ps3000aSetTriggerChannelConditions()
-        #ps3000aSetTriggerChannelDirections()
-        #ps3000aSetTriggerChannelProperties()
-        #ps3000aRunBlock
+        # Convert the autotrigger_timeout from seconds to milliseconds
+        autotrigger_timeout_ms = int(round(autotrigger_timeout * 1e3))
 
+        if (autotrigger_timeout_ms < 0.0 or 
+                autotrigger_timeout_ms > 2**(8*sizeof(long) - 1)):
+            raise ValueError('Invalid timeout:'
+                    'The autotrigger timeout must be a positive number '
+                    'of seconds, no greater than %.3f. (%.3f given)' % 
+                    (2**(8*sizeof(long) - 1)/1e3, 
+                        float(autotrigger_timeout)))
 
+        setup_trigger(self.__handle, self.__trigger, self.__channel_states,
+                sampling_period, autotrigger_timeout_ms)
+
+        oversample = 1
+        segment_index = 0
+
+        #run_block(self.__handle, pre_trigger_samples, post_trigger_samples,
+        #        timebase_index, oversample, segment_index)
 
