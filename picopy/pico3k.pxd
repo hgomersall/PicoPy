@@ -48,6 +48,9 @@ cdef float PS3000A_PRBS_MAX_FREQUENCY = 1000000.0
 cdef float PS3000A_PRBS_MIN_FREQUENCY = 0.03
 cdef float PS3000A_MIN_FREQUENCY = 0.03
 
+ctypedef enum PS3000A_COUPLING:
+    PS3000A_AC = 0
+    PS3000A_DC = 1
 
 cdef extern from 'libps3000a-1.0/ps3000aApi.h':
 
@@ -86,10 +89,6 @@ cdef extern from 'libps3000a-1.0/ps3000aApi.h':
         PS3000A_20V
         PS3000A_50V
         PS3000A_MAX_RANGES
-
-    ctypedef enum  PS3000A_COUPLING:
-        PS3000A_AC
-        PS3000A_DC
 
     ctypedef enum PS3000A_CHANNEL_INFO:
         PS3000A_CI_RANGES
