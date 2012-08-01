@@ -20,10 +20,12 @@
 '''
 
 try:
-    from pico3k import (
-            Pico3k,
-            EdgeTrigger,)
+    from pico3k import Pico3k
 except ImportError:
     pass
+
+from triggers import (
+        EdgeTrigger,
+        PulseWidthTrigger)
 
 import logic

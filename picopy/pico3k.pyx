@@ -31,7 +31,6 @@ import time
 from math import copysign
 
 from libc.stdlib cimport malloc, free
-from libc.stdio cimport printf
 
 import numpy as np
 cimport numpy as np
@@ -584,6 +583,7 @@ cdef setup_pulse_width_qualifier(short handle, trigger,
             round(pwq['PWQ_lower']/sampling_period))
     cdef unsigned long PWQ_upper = int(
             round(pwq['PWQ_upper']/sampling_period))
+
     cdef PS3000A_PULSE_WIDTH_TYPE PWQ_type = pwq['PWQ_type']
 
     with nogil:
@@ -640,59 +640,6 @@ cpdef get_units():
         unit_list = py_serial_str.split(',')
 
     return unit_list
-
-
-cdef class EdgeTrigger:
-    '''Define an edge trigger object (including an advanced edge trigger).
-    '''
-
-    cdef object _channel
-    cdef object _properties
-
-    _valid_directions = ['RISING', 'FALLING', 'RISING_OR_FALLING']
-    
-    def __getitem__(self, key):
-
-        if key == 'logic_function':
-            return self._channel
-
-        elif key == self._channel:
-            return self._properties
-
-        else:
-            raise KeyError('Invalid channel')
-
-    def __init__(self, channel, threshold=0.0, direction='RISING',
-            hysteresis=0.0):
-        '''Initialise an edge trigger.
-
-        channel is the channel to which the trigger should apply.
-        
-        threshold is a floating point value giving the threshold voltage for
-        the edge trigger.
-
-        direction is one of 'RISING', 'FALLING' or 'RISING_OR_FALLING'.
-        These refer to the signal rising, falling or either. 
-
-        hysteresis is a positive floating point number. After the signal
-        passes the threshold in the given direction, the trigger becomes
-        armed. The signal must then pass the number of volts given by 
-        hysteresis beyond that the threshold for the trigger to fire.
-        '''
-
-        self._channel = channel
-
-        properties = dict(default_trigger_properties)
-
-        if direction not in self._valid_directions:
-            raise ValueError('Invalid direction: The direction passed does '
-                    'not correspond to any known edge trigger.')
-
-        properties['trigger_direction'] = direction
-        properties['upper_threshold'] = float(threshold)
-        properties['upper_hysteresis'] = float(hysteresis)
-
-        self._properties = frozendict(properties)
 
 
 cdef class Pico3k:

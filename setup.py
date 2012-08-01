@@ -31,7 +31,7 @@ library_dirs = []
 package_data = {}
 
 if get_platform() == 'win32':
-    libraries = ['ps3000a', 'usb_pico-1.0']
+    libraries = ['PS3000a']
     include_dirs.append('picopy')
     library_dirs.append(os.path.join(os.getcwd(),'picopy'))
 else:
