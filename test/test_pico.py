@@ -232,7 +232,7 @@ class Pico3kTest(unittest.TestCase):
             else:
                 return (index - 3)/(max_sampling_rate/8)
 
-        def compute_nearest_sp(sampling_period):
+        def compute_nearest_sp(sampling_period, active_channels=1):
 
             if sampling_period > max_sampling_period:
                 return max_sampling_period
@@ -246,8 +246,13 @@ class Pico3kTest(unittest.TestCase):
             else:
                 index = (max_sampling_rate/8)*sampling_period + 2
 
-            low_index = int(math.floor(index))
-            high_index = int(math.ceil(index))
+            min_index = int(math.ceil(math.log(active_channels, 2))) 
+            if index < min_index:
+                low_index = min_index
+                high_index = min_index
+            else:
+                low_index = int(math.floor(index))
+                high_index = int(math.ceil(index))
 
             low_sampling_period = sampling_period_from_index(low_index)
             high_sampling_period = sampling_period_from_index(high_index)
@@ -263,26 +268,26 @@ class Pico3kTest(unittest.TestCase):
         test_set = [-100.0, 0, 0.1e-12, 2e-9, 3e-9, 7e-9, 20e-9, 5e-5, 20, 
                 1000]
 
-        for each_sp in test_set:
+        # We run the test for one and both channels enabled
+        for channel in ('A', 'B'):
 
-            valid_period, max_samples = pico.get_valid_sampling_period(
-                    each_sp)
+            pico.configure_channel(channel)
 
-            test_valid_period = compute_nearest_sp(each_sp)
+            for each_sp in test_set:
 
-            self.assertAlmostEqual(valid_period, test_valid_period, 
-                    places=3)
+                valid_period, max_samples = pico.get_valid_sampling_period(
+                        each_sp)
+
+                test_valid_period = compute_nearest_sp(each_sp)
+
+                self.assertAlmostEqual(valid_period, test_valid_period, 
+                        places=3)
 
     def test_get_valid_sampling_period_invalid_args(self):
 
         with self.assertRaises(TypeError):
             pico.get_valid_sampling_period('sdfsdfsdf')
 
-        with self.assertRaisesRegexp(ValueError, 'Value out of range'):
-            pico.get_valid_sampling_period(1e-7, 256)
-
-        with self.assertRaisesRegexp(ValueError, 'Value out of range'):
-            pico.get_valid_sampling_period(1e-7, 0)
 
     def test_block_capture_with_too_many_samples(self):
 
@@ -291,23 +296,15 @@ class Pico3kTest(unittest.TestCase):
 
             pico.capture_block(4e-9, 10e10)
 
-    def test_block_capture_with_invalid_oversample(self):
-
-        with self.assertRaisesRegexp(ValueError, 'Value out of range'):
-            pico.capture_block(4e-9, 1024, oversample=0)
-
-        with self.assertRaisesRegexp(ValueError, 'Value out of range'):
-            pico.capture_block(4e-9, 1024, oversample=256)
-
     def test_block_capture_with_invalid_timeout(self):
 
         with self.assertRaisesRegexp(ValueError, 
                 'Invalid timeout'):
 
-            pico.capture_block(4e-9, 1024, autotrigger_timeout=-10)
-            pico.capture_block(4e-9, 1024, autotrigger_timeout=2**32)
+            pico.capture_block(4e-9, 10e-8, autotrigger_timeout=-10)
+            pico.capture_block(4e-9, 10e-8, autotrigger_timeout=2**32)
 
-    def test_block_capture_with_timeout(self):
-
-        pico.capture_block(4e-9, 1024)
+    #def test_block_capture_with_timeout(self):
+    #
+    #    pico.capture_block(4e-9, 1024)
 

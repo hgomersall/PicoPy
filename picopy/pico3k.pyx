@@ -83,6 +83,12 @@ voltage_range_values = frozendict({
     PS3000A_10V: 10.0,
     PS3000A_20V: 20.0})
 
+downsampling_modes = frozendict({
+    'NONE': PS3000A_RATIO_MODE_NONE,
+    'AVERAGE': PS3000A_RATIO_MODE_AVERAGE,
+    'DECIMATE': PS3000A_RATIO_MODE_DECIMATE,
+    })
+
 threshold_direction_dict = frozendict({
     'ABOVE': PS3000A_ABOVE,
     'ABOVE_LOWER': PS3000A_ABOVE_LOWER,
@@ -213,7 +219,7 @@ cdef set_channel(short handle, channel, bint enable,
     check_status(status)
 
 cdef get_timebase(short handle, unsigned long timebase_index, 
-        long no_samples, short oversample, unsigned short segment_index):
+        long no_samples, unsigned short segment_index):
 
     cdef float time_interval
     cdef long max_samples
@@ -221,15 +227,21 @@ cdef get_timebase(short handle, unsigned long timebase_index,
 
     with nogil:
         status = ps3000aGetTimebase2(handle, timebase_index, no_samples, 
-                &time_interval, oversample, &max_samples, segment_index)
+                &time_interval, 1, &max_samples, segment_index)
 
     check_status(status)
 
     return (time_interval*1e-9, max_samples)
 
+cdef get_minimum_timebase_index(active_channels):
+    '''Compute the smallest timebase that can be used given
+    the number of active channels.
+    '''
+    return int(math.ceil(math.log(active_channels, 2)))    
+
 cdef unsigned long compute_timebase_index(
         float sampling_period, float sampling_rate, 
-        unsigned char oversample):
+        int active_channels):
     '''Round the sampling period to the nearest valid sampling period and
     return the timebase index to which the sampling period corresponds.
 
@@ -240,23 +252,21 @@ cdef unsigned long compute_timebase_index(
     cdef unsigned long timebase_index_low 
     cdef unsigned long timebase_index
 
-    # We need to work with a sampling period that has been
-    # scaled by the oversample rate
-    us_sampling_period = sampling_period/oversample
+    min_timebase_index = get_minimum_timebase_index(active_channels)
 
-    if us_sampling_period < 1/sampling_rate:
-        return 0
+    if sampling_period < 1/sampling_rate:
+        return min_timebase_index
 
-    elif us_sampling_period > (2**32 - 3)/(sampling_rate/8):
+    elif sampling_period > (2**32 - 3)/(sampling_rate/8):
         return 2**32 - 1
 
-    elif us_sampling_period < 8/sampling_rate:
+    elif sampling_period < 8/sampling_rate:
         timebase_index_low = int(
-                math.floor(math.log(us_sampling_period * sampling_rate, 2)))
+                math.floor(math.log(sampling_period * sampling_rate, 2)))
 
     else:
         timebase_index_low = int(
-                math.floor(us_sampling_period * sampling_rate/8 + 2))
+                math.floor(sampling_period * sampling_rate/8 + 2))
 
     cdef float mean_sampling_period = 0.0
     cdef int n
@@ -270,16 +280,20 @@ cdef unsigned long compute_timebase_index(
             mean_sampling_period += (
                     (timebase_index_low + n - 2)/(2*sampling_rate/8))
 
-    if us_sampling_period < mean_sampling_period:
+    if sampling_period < mean_sampling_period:
         timebase_index = timebase_index_low
     else:
         timebase_index = timebase_index_low + 1
+
+    # Finally check that we're not below the minimum timebase index
+    if timebase_index < min_timebase_index:
+        timebase_index = min_timebase_index
 
     return timebase_index
 
 cdef run_block(short handle, long no_of_pretrigger_samples, 
         long no_of_posttrigger_samples, unsigned long timebase_index, 
-        short oversample, unsigned short segment_index):
+        unsigned short segment_index):
 
     cdef PICO_STATUS status
     cdef bint blocking = True
@@ -288,7 +302,7 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
 
     with nogil:
         status = ps3000aRunBlock(handle, no_of_pretrigger_samples, 
-                no_of_posttrigger_samples, timebase_index, oversample,
+                no_of_posttrigger_samples, timebase_index, 1,
                 &time_indisposed_ms, segment_index, NULL, NULL)
 
     check_status(status)
@@ -342,7 +356,8 @@ cdef setup_arrays(short handle, channels, samples):
     return channel_array
 
 
-cdef get_data(short handle, channels, samples):
+cdef get_data(short handle, channels, samples, unsigned long downsample, 
+        PS3000A_RATIO_MODE downsample_mode):
     '''Get the data associated with the given channels, and return a
     tuple containing a dictionary of samples length numpy arrays (as
     the first element) and a dictionary of bools indicating whether
@@ -351,7 +366,6 @@ cdef get_data(short handle, channels, samples):
     Each channel is a view into an N x samples length block of memory,
     where N is the number of channels.
 
-    What is returned is a tuple with first ele
     '''
     
     cdef PICO_STATUS status
@@ -362,7 +376,11 @@ cdef get_data(short handle, channels, samples):
 
     n_channels = len(channels)
 
-    full_array = np.zeros((n_channels, samples), dtype='int16')
+    if (downsample_mode == PS3000A_RATIO_MODE_AVERAGE or
+            downsample_mode == PS3000A_RATIO_MODE_DECIMATE):
+        _samples = int(math.ceil(samples/downsample))
+
+    full_array = np.zeros((n_channels, _samples), dtype='int16')
     
     data_dict = {}
 
@@ -374,7 +392,7 @@ cdef get_data(short handle, channels, samples):
 
         with nogil:
             status = ps3000aSetDataBuffer(handle, _channel, _buffer, 
-                    _samples, segment_index, PS3000A_RATIO_MODE_NONE)
+                    _samples, segment_index, downsample_mode)
 
         check_status(status)
 
@@ -382,19 +400,18 @@ cdef get_data(short handle, channels, samples):
         
     
     cdef unsigned long start_index = 0
-    cdef unsigned long downsample_factor = 1
     cdef short overflow
 
-    cdef unsigned long n_samples = samples
+    cdef unsigned long n_samples = _samples
 
     with nogil:
         status = ps3000aGetValues(handle, start_index, &n_samples, 
-                downsample_factor, PS3000A_RATIO_MODE_NONE, segment_index,
+                downsample, downsample_mode, segment_index,
                 &overflow)
 
     check_status(status)
 
-    if not n_samples == samples:
+    if not n_samples == _samples:
         raise IOError('The expected number of samples were not returned.')
 
     overflow_dict = {}
@@ -943,7 +960,7 @@ cdef class Pico3k:
         # Finally write the trigger dict back to the main triggers dict
         self.__trigger = trigger
 
-    def get_valid_sampling_period(self, sampling_period, oversample=1):
+    def get_valid_sampling_period(self, sampling_period):
         '''Compute the closest valid sampling period to sampling_period 
         given the hardware settings and return a tuple giving the closest
         valid sampling period as a floating point number and the maximum
@@ -952,71 +969,82 @@ cdef class Pico3k:
 
         sampling_period is the the number of seconds between each
         sample.
-
-        oversample is the number of samples that are averaged to
-        return a single sample.
         '''
 
-        if oversample < 1 or oversample > 2**8 - 1:
-            raise ValueError('Value out of range: oversample should be '
-                    'between 1 and %i inclusive.', (2**8 - 1))
+        # The number of active channels dictates the maximum sampling
+        # rate.
+        active_channels = 0
+        for channel in self.__channel_states:
+            if self.__channel_states[channel][1]:
+                active_channels += 1
 
         cdef unsigned long timebase_index = compute_timebase_index(
-                sampling_period, self.__max_sampling_rate, oversample)
+                sampling_period, self.__max_sampling_rate, active_channels)
 
         valid_period, max_samples = get_timebase(self.__handle, 
-                timebase_index, 0, oversample, 0)
+                timebase_index, 0, 0)
 
-        # Check we are not at the limits of the range
-        if not (timebase_index == 0 or timebase_index == 2**32-1):
+        # We should look to see whether we should
+        # actually be returning the sampling period above or
+        # below the currently calculated one.
+        min_timebase_index = get_minimum_timebase_index(active_channels)
+        max_timebase_index = 2**32-1
 
-            # If we're not, we should look to see whether we should
-            # actually be returning the sampling period above or
-            # below the currently calculated one.
-            if sampling_period > valid_period:
-                alt_timebase_index = timebase_index + 1
+        if (sampling_period > valid_period and 
+                timebase_index < max_timebase_index):
+            alt_timebase_index = timebase_index + 1
 
-                valid_period_low = valid_period
-                max_samples_low = max_samples
-                valid_period_high, max_samples_high = get_timebase(
-                        self.__handle, alt_timebase_index, 0, oversample, 0)
+            valid_period_low = valid_period
+            max_samples_low = max_samples
+            valid_period_high, max_samples_high = get_timebase(
+                    self.__handle, alt_timebase_index, 0, 0)
 
-            else:
-                alt_timebase_index = timebase_index - 1
+        elif timebase_index > min_timebase_index:
+            alt_timebase_index = timebase_index - 1
 
-                valid_period_low, max_samples_low = get_timebase(
-                        self.__handle, alt_timebase_index, 0, oversample, 0)
+            valid_period_low, max_samples_low = get_timebase(
+                    self.__handle, alt_timebase_index, 0, 0)
 
-                valid_period_high = valid_period
-                max_samples_high = max_samples
+            valid_period_high = valid_period
+            max_samples_high = max_samples
 
-            mean_valid_period = (valid_period_high + valid_period_low)/2
+        else:
+            valid_period_low = valid_period
+            valid_period_high = valid_period
+            max_samples_low = max_samples
+            max_samples_high = max_samples
 
-            if sampling_period < mean_valid_period:
-                valid_period = valid_period_low
-                max_samples = max_samples_low
-            else:
-                valid_period = valid_period_high
-                max_samples = max_samples_high
+        mean_valid_period = (valid_period_high + valid_period_low)/2
+
+        if sampling_period < mean_valid_period:
+            valid_period = valid_period_low
+            max_samples = max_samples_low
+        else:
+            valid_period = valid_period_high
+            max_samples = max_samples_high
 
         return (valid_period, max_samples)
 
-    def capture_block(self, sampling_period, post_trigger_samples, 
-            pre_trigger_samples=0, oversample=1, 
-            autotrigger_timeout=None, return_scaled_array=True):
+    def capture_block(self, sampling_period, post_trigger_time, 
+            pre_trigger_time=0.0, autotrigger_timeout=None, 
+            downsample=1, downsample_mode='NONE', 
+            return_scaled_array=True):
         '''Capture a block of data.
 
         The actual sampling period is adjusted to fit a nearest valid
         sampling period that can be found. To know in advance what will
         be used, call the get_valid_sampling_period method with the same
-        sampling_period and oversample arguments.
-
-        oversample is the number of samples that are averaged to produce
-        a single sample. Clearly this will affect the output sample rate.
+        sampling_period argument.
 
         autotrigger_timeout is the number of seconds before the trigger 
         should fire automatically. Setting this to None or 0 means the 
         trigger will never fire automatically.
+
+        downsample_mode dictates the mode that the pico scope uses
+        to downsample the captured data and return it to the host machine.
+        For every block of length ``downsample'', 'NONE' returns
+        all samples with no downsample, 'AVERAGE' returns the average of 
+        those samples, and 'DECIMATE' returns the first.
 
         If return_scaled_array is set to False, the raw data is
         returned without scaling it to the voltage range for each
@@ -1025,20 +1053,32 @@ cdef class Pico3k:
         
         cdef unsigned long timebase_index
 
-        if oversample < 1 or oversample > 2**8 - 1:
-            raise ValueError('Value out of range: oversample should be '
-                    'between 1 and %i inclusive.', (2**8 - 1))
-
         valid_sampling_period, max_samples = self.get_valid_sampling_period(
-                sampling_period, oversample)
+                sampling_period)
+
+        post_trigger_samples = int(
+                round(post_trigger_time/valid_sampling_period))
+        pre_trigger_samples = int(
+                round(pre_trigger_time/valid_sampling_period))
 
         n_samples = post_trigger_samples + pre_trigger_samples
 
         if n_samples > max_samples:
             raise PicoError(pico_status.PICO_TOO_MANY_SAMPLES)
+
+        data_channels = set()
+        for channel in self.__channel_states:
+            if self.__channel_states[channel][1]:
+                data_channels.add(channel)
+
+        active_channels = len(data_channels)
+
+        if active_channels == 0:
+            raise RuntimeError('No active channels: No channels have been '
+                    'enabled.')
         
         timebase_index = compute_timebase_index(valid_sampling_period, 
-                self.__max_sampling_rate, oversample)
+                self.__max_sampling_rate, active_channels)
 
         if autotrigger_timeout is None:
             autotrigger_timeout = 0.0
@@ -1060,14 +1100,14 @@ cdef class Pico3k:
         segment_index = 0
 
         run_block(self.__handle, pre_trigger_samples, post_trigger_samples,
-                timebase_index, oversample, segment_index)
+                timebase_index, segment_index)
 
-        data_channels = set()
-        for channel in self.__channel_states:
-            if self.__channel_states[channel][1]:
-                data_channels.add(channel)
+        cdef unsigned long _downsample = downsample
+        cdef PS3000A_RATIO_MODE _downsample_mode = (
+                downsampling_modes[downsample_mode])
 
-        data, overflow = get_data(self.__handle, data_channels, n_samples)
+        data, overflow = get_data(self.__handle, data_channels, n_samples,
+                _downsample, _downsample_mode)
 
         stop_scope(self.__handle)
 
