@@ -203,6 +203,20 @@ cdef get_unit_info(short handle, PICO_INFO info):
 
     return py_info_str
 
+cdef get_sample_limits(short handle):
+    cdef short min_val
+    cdef short max_val
+
+    with nogil:
+        status = ps3000aMinimumValue(handle, &min_val)
+    check_status(status)
+
+    with nogil:
+        status = ps3000aMaximumValue(handle, &max_val)
+    check_status(status)
+
+    return (min_val, max_val)
+
 cdef set_channel(short handle, channel, bint enable, 
         voltage_range, channel_type, float analogue_offset):
 
@@ -507,16 +521,7 @@ cdef setup_trigger_properties(short handle, trigger, channel_states,
     trigger_properties = <PS3000A_TRIGGER_CHANNEL_PROPERTIES *>malloc(
             sizeof(PS3000A_TRIGGER_CHANNEL_PROPERTIES) * n_properties)
 
-    cdef short min_val
-    cdef short max_val
-
-    with nogil:
-        status = ps3000aMinimumValue(handle, &min_val)
-    check_status(status)
-
-    with nogil:
-        status = ps3000aMaximumValue(handle, &max_val)
-    check_status(status)
+    min_val, max_val = get_sample_limits(handle)
 
     for n, channel in enumerate(channels):
         channel_v_range = channel_states[channel][0]
@@ -1111,10 +1116,12 @@ cdef class Pico3k:
 
         stop_scope(self.__handle)
 
+        min_val, max_val = get_sample_limits(self.__handle)
+
         if return_scaled_array:
             for channel in data:
                 channel_scaling = ( 
-                        self.__channel_states[channel][0]/2**15)
+                        self.__channel_states[channel][0]/max_val)
                 scaled_channel_data = data[channel] * channel_scaling
                 data[channel] = scaled_channel_data
 

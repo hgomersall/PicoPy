@@ -77,6 +77,8 @@ class PulseWidthTrigger(object):
     def __init__(self, channel, threshold, time=0.0, hysteresis=0.0,
             pulse_direction='POSITIVE_PULSE', condition='GREATER_THAN', 
             time2=None):
+        '''Set up a pulse width trigger.
+        '''
 
         self._edge_trigger = EdgeTrigger(channel, threshold, 
                 self.direction_mapping[pulse_direction][1], hysteresis)
