@@ -76,7 +76,8 @@ voltage_range_dict = frozendict({
 voltage_range_values = frozendict({
     PS3000A_50MV: 50e-3,
     PS3000A_100MV: 100e-3,
-    PS3000A_200MV: 500e-3,
+    PS3000A_200MV: 200e-3,
+    PS3000A_500MV: 500e-3,
     PS3000A_1V: 1.0,
     PS3000A_2V: 2.0,
     PS3000A_5V: 5.0,
@@ -432,6 +433,8 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
     for channel in channels:
         overflow_dict[channel] = bool(
                 1 << channel_enumeration[channel] & overflow)
+
+    print overflow_dict
 
     return (data_dict, overflow_dict)
 
@@ -1030,6 +1033,18 @@ cdef class Pico3k:
 
         return (valid_period, max_samples)
 
+    def get_scalings(self):
+        
+        min_val, max_val = get_sample_limits(self.__handle)
+        scalings = {}
+        
+        for channel in self.__channel_states:
+            if self.__channel_states[channel][1]:
+                scalings[channel] = ( 
+                        self.__channel_states[channel][0]/max_val)
+
+        return scalings
+
     def capture_block(self, sampling_period, post_trigger_time, 
             pre_trigger_time=0.0, autotrigger_timeout=None, 
             downsample=1, downsample_mode='NONE', 
@@ -1116,13 +1131,11 @@ cdef class Pico3k:
 
         stop_scope(self.__handle)
 
-        min_val, max_val = get_sample_limits(self.__handle)
+        scalings = self.get_scalings()
 
         if return_scaled_array:
             for channel in data:
-                channel_scaling = ( 
-                        self.__channel_states[channel][0]/max_val)
-                scaled_channel_data = data[channel] * channel_scaling
+                scaled_channel_data = data[channel] * scalings[channel]
                 data[channel] = scaled_channel_data
 
         return (data, overflow)
