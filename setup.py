@@ -71,7 +71,7 @@ setup_args = {
             'Intended Audience :: Science/Research',
             'Topic :: Scientific/Engineering',
             ],
-        'packages':['PicoPy'],
+        'packages':['picopy'],
         'ext_modules': ext_modules,
         'include_dirs': include_dirs,
         'package_data': package_data,

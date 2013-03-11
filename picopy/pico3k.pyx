@@ -435,6 +435,7 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
                 1 << channel_enumeration[channel] & overflow)
 
     print overflow_dict
+    print overflow
 
     return (data_dict, overflow_dict)
 

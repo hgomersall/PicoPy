@@ -1,0 +1,6 @@
+*.pyc
+*.so
+*.swp
+pico_status.c
+pico3k.c
+build
