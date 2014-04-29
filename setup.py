@@ -31,22 +31,30 @@ library_dirs = []
 package_data = {}
 
 if get_platform() == 'win32':
-    libraries = ['PS3000a']
+    #libraries = ['PS3000a']
+    libraries = ['PS4000']
     include_dirs.append('picopy')
+    include_dirs.append(os.path.join('include', '4k'))
     library_dirs.append(os.path.join(os.getcwd(),'picopy'))
+    package_data['picopy'] = ['PS4000.dll', 'PicoIpp.dll']
 else:
     libraries = ['ps3000a', 'usb_pico-1.0']
 
 
 ext_modules = [
-        Extension('picopy.pico3k',
-            sources=[os.path.join('picopy', 'pico3k.c')],
+    #Extension('picopy.pico3k',
+    #        sources=[os.path.join('picopy', 'pico3k.c')],
+    #        libraries=libraries,
+    #        library_dirs=library_dirs),
+    Extension('picopy.pico4k',
+            sources=[os.path.join('picopy', 'pico4k.c')],
             libraries=libraries,
+            include_dirs=include_dirs,
             library_dirs=library_dirs),
     Extension(
             'picopy.pico_status',
             sources = [os.path.join('picopy', 'pico_status.c')], 
-            include_dirs = ['picopy'])]
+            include_dirs=include_dirs)]
 
 version = '0.0.1'
 
@@ -58,7 +66,7 @@ setup_args = {
         'version': version,
         'author': 'Henry Gomersall',
         'author_email': 'heng@kedevelopments.co.uk',
-        'description': 'A pythonic wrapper around the PicoScope (3000 series) API.',
+        'description': 'A pythonic wrapper around the PicoScope (3000 and 4000 series) API.',
         'url': 'http://hgomersall.github.com/PicoPy/',
         'long_description': long_description,
         'classifiers': [

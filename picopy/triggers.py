@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 
-from pico3k import default_trigger_properties, default_pwq_properties
+try:
+    from pico3k import default_trigger_properties, default_pwq_properties
+except ImportError:
+    from pico4k import default_trigger_properties, default_pwq_properties
+
 
 class EdgeTrigger(object):
     '''Define an edge trigger object (including an advanced edge trigger).

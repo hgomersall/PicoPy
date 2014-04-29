@@ -11,8 +11,12 @@ class PicoError(Exception):
     def __init__(self, status_code):
         self.status_code = status_code
 
-        self.status_code_str = status_code_lookup[status_code][0]
-        self.status_str = status_code_lookup[status_code][1]
+        try:
+            self.status_code_str = status_code_lookup[status_code][0]
+            self.status_str = status_code_lookup[status_code][1]
+        except KeyError:
+            self.status_code_str = 'ERROR ' + str(status_code)
+            self.status_str = 'Unknown error (lookup the 4k docs)'
 
     def __str__(self):
         return '%s: %s' % (self.status_code_str, self.status_str)

@@ -21,20 +21,26 @@
 from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Distutils import build_ext
-from setup import setup_args, libraries, library_dirs
+from setup import setup_args, libraries, library_dirs, include_dirs
 import os
 
 ext_modules = [
+        #Extension(
+        #    'picopy.pico3k',
+        #    sources = [os.path.join('picopy', 'pico3k.pyx')], 
+        #    include_dirs = ['picopy', 'include'],
+        #    libraries=libraries,
+        #    library_dirs=library_dirs),
         Extension(
-            'picopy.pico3k',
-            sources = [os.path.join('picopy', 'pico3k.pyx')], 
-            include_dirs = ['picopy'],
+            'picopy.pico4k',
+            sources = [os.path.join('picopy', 'pico4k.pyx')], 
             libraries=libraries,
+            include_dirs=include_dirs,
             library_dirs=library_dirs),
         Extension(
             'picopy.pico_status',
-            sources = [os.path.join('picopy', 'pico_status.pyx')], 
-            include_dirs = ['picopy'])]
+            sources=[os.path.join('picopy', 'pico_status.pyx')], 
+            include_dirs=include_dirs)]
 
 setup_args['cmdclass'] = {'build_ext': build_ext}
 setup_args['ext_modules'] = ext_modules

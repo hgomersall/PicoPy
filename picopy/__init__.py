@@ -19,8 +19,15 @@
 ''' Import everything we want into the picopy namespace
 '''
 
+import pico_status
+
 try:
-    from pico3k import Pico3k
+    from .pico3k import Pico3k
+except ImportError:
+    pass
+
+try:
+    from .pico4k import Pico4k
 except ImportError:
     pass
 
