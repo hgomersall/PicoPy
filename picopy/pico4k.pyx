@@ -30,10 +30,12 @@ import math
 import time
 from math import copysign
 
-from libc.stdlib cimport malloc, free
+#from libc.stdlib cimport malloc, free
 
 import numpy as np
 cimport numpy as np
+
+from cpython.mem cimport PyMem_Malloc, PyMem_Free
 
 capability_dict = frozendict({
     '4227': frozendict({'channels': 2, 'max_sampling_rate': 2.5e8})})
@@ -160,11 +162,10 @@ cdef close_unit(short handle):
 
     check_status(status)
 
-
 cdef get_unit_info(short handle, PICO_INFO info):
 
     cdef short n = 20
-    cdef char* info_str = <char *>malloc(sizeof(char)*(n))
+    cdef char* info_str = <char *>PyMem_Malloc(sizeof(char)*(n))
     cdef short required_n
 
     cdef bytes py_info_str
@@ -177,9 +178,9 @@ cdef get_unit_info(short handle, PICO_INFO info):
     
     # Make sure we had a big enough string
     if required_n > n:
-        free(info_str)
+        PyMem_Free(info_str)
         n = required_n
-        info_str = <char *>malloc(sizeof(char)*(n))
+        info_str = <char *>PyMem_Malloc(sizeof(char)*(n))
         
         with nogil:
             status = ps4000GetUnitInfo(
@@ -189,7 +190,7 @@ cdef get_unit_info(short handle, PICO_INFO info):
     try:
         py_info_str = info_str
     finally:
-        free(info_str)
+        PyMem_Free(info_str)
 
     return py_info_str
 
@@ -300,12 +301,30 @@ cdef unsigned long compute_timebase_index(
 
 cdef run_block(short handle, long no_of_pretrigger_samples, 
         long no_of_posttrigger_samples, unsigned long timebase_index, 
-        unsigned short segment_index):
+        unsigned short segment_index, unsigned short number_of_captures):
 
     cdef PICO_STATUS status
     cdef bint blocking = True
     
     cdef long time_indisposed_ms
+
+    cdef long max_samples_per_segment
+    with nogil:
+        status = ps4000MemorySegments(handle, number_of_captures, 
+                &max_samples_per_segment)
+
+    check_status(status)
+
+    if (max_samples_per_segment < 
+            no_of_posttrigger_samples + no_of_pretrigger_samples):
+        raise ValueError('The number of captures requested with the given '
+                'number of samples is too great to store in the picoscope '
+                'memory')
+
+    with nogil:
+        status = ps4000SetNoOfCaptures(handle, number_of_captures)
+
+    check_status(status)
 
     with nogil:
         status = ps4000RunBlock(handle, no_of_pretrigger_samples, 
@@ -434,10 +453,92 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
         overflow_dict[channel] = bool(
                 1 << channel_enumeration[channel] & overflow)
 
-    print overflow_dict
-    print overflow
+    return (data_dict, overflow_dict)
+
+cdef get_data_bulk(short handle, channels, samples, unsigned long downsample, 
+        RATIO_MODE downsample_mode, unsigned short number_of_captures):
+    '''Get the data associated with the given channels, and return a
+    tuple containing a dictionary of samples length numpy arrays (as
+    the first element) and a dictionary of bools indicating whether
+    the scope channel overflowed during the capture.
+
+    Each channel is a view into an N x samples length block of memory,
+    where N is the number of channels.
+
+    '''
+    
+    cdef PICO_STATUS status
+    cdef PS4000_CHANNEL _channel
+    cdef short * _buffer
+    cdef short * _single_capture_buffer
+    cdef long _samples = samples
+
+    n_channels = len(channels)
+
+    if downsample_mode != RATIO_MODE_NONE:
+        raise ValueError('For rapid mode acquisitions, aggregation is '
+                'currently unsupported.')
+
+    full_array = np.zeros((n_channels, number_of_captures, _samples), 
+            dtype='int16')
+    
+    data_dict = {}
+
+    cdef int i
+    for n, channel in enumerate(channels):
+
+        channel_array = full_array[n, :, :]
+        _channel = channel_dict[channel]
+        _buffer = <short *>np.PyArray_DATA(channel_array)
+        with nogil:
+            for i in range(number_of_captures):
+                _single_capture_buffer = _buffer + i*_samples
+                status = ps4000SetDataBufferBulk(handle, _channel, 
+                        _single_capture_buffer, _samples, i)
+
+        check_status(status)
+
+        data_dict[channel] = channel_array
+    
+    cdef unsigned long start_index = 0
+    cdef short any_overflow = 0
+
+    cdef unsigned long n_samples = _samples
+
+    cdef bint n_samples_fail = False
+    
+    cdef short* _overflow = <short *>PyMem_Malloc(
+            sizeof(short)*(number_of_captures))
+
+    cdef int this_channel
+
+    try:
+        with nogil:
+            status = ps4000GetValuesBulk(handle, &n_samples, 
+                    0, number_of_captures-1, _overflow)
+
+            if not n_samples == _samples:
+                n_samples_fail = True
+
+        check_status(status)
+
+        if n_samples_fail:
+            raise IOError('The expected number of samples were not returned.')
+
+        overflow_dict = {}
+        for channel in channels:
+            this_channel = channel_enumeration[channel]
+
+            for i in range(number_of_captures):
+                any_overflow &= (1 << this_channel) & _overflow[i]
+
+            overflow_dict[channel] = bool(any_overflow)
+
+    finally:
+        PyMem_Free(_overflow)
 
     return (data_dict, overflow_dict)
+
 
 cdef stop_scope(short handle):
 
@@ -454,30 +555,33 @@ cdef setup_trigger_conditions(short handle, logic_sop, logic_variables):
 
     cdef TRIGGER_CONDITIONS *trigger_conditions
 
-    trigger_conditions = <TRIGGER_CONDITIONS *>malloc(
+    trigger_conditions = <TRIGGER_CONDITIONS *>PyMem_Malloc(
             sizeof(TRIGGER_CONDITIONS) * n_conditions)
 
-    for n, products in enumerate(logic_sop):
+    try:
+        for n, products in enumerate(logic_sop):
 
-        trigger_state = <TRIGGER_STATE *>&trigger_conditions[n]
+            trigger_state = <TRIGGER_STATE *>&trigger_conditions[n]
 
-        for each_channel in channel_enumeration:
+            for each_channel in channel_enumeration:
 
-            if each_channel in logic_variables:
+                if each_channel in logic_variables:
 
-                channel_index = logic_variables.index(each_channel)
+                    channel_index = logic_variables.index(each_channel)
 
-                trigger_state[channel_enumeration[each_channel]] = (
-                        trigger_state_dict[products[channel_index]])
-            else:
-                trigger_state[channel_enumeration[each_channel]] = (
-                        trigger_state_dict[None])
+                    trigger_state[channel_enumeration[each_channel]] = (
+                            trigger_state_dict[products[channel_index]])
+                else:
+                    trigger_state[channel_enumeration[each_channel]] = (
+                            trigger_state_dict[None])
 
-    with nogil:
-        status = ps4000SetTriggerChannelConditions(handle, 
-                trigger_conditions, n_conditions)
+        with nogil:
+            status = ps4000SetTriggerChannelConditions(handle, 
+                    trigger_conditions, n_conditions)
     
-    free(trigger_conditions)
+    finally:
+        PyMem_Free(trigger_conditions)
+
     check_status(status)
 
 
@@ -522,54 +626,57 @@ cdef setup_trigger_properties(short handle, trigger, channel_states,
     cdef short n_properties = len(channels)
 
     cdef TRIGGER_CHANNEL_PROPERTIES *trigger_properties
-    trigger_properties = <TRIGGER_CHANNEL_PROPERTIES *>malloc(
+    trigger_properties = <TRIGGER_CHANNEL_PROPERTIES *>PyMem_Malloc(
             sizeof(TRIGGER_CHANNEL_PROPERTIES) * n_properties)
 
-    min_val, max_val = get_sample_limits(handle)
+    try:
+        min_val, max_val = get_sample_limits(handle)
 
-    for n, channel in enumerate(channels):
-        channel_v_range = channel_states[channel][0]
-        ADC_scaling = float(max_val)/channel_v_range
+        for n, channel in enumerate(channels):
+            channel_v_range = channel_states[channel][0]
+            ADC_scaling = float(max_val)/channel_v_range
 
-        upper_threshold = int(round(
-            trigger[channel]['upper_threshold'] * ADC_scaling))
-        upper_thld_hyst = int(round(
-            trigger[channel]['upper_hysteresis'] * ADC_scaling))
-        lower_threshold = int(round(
-            trigger[channel]['lower_threshold'] * ADC_scaling))
-        lower_thld_hyst = int(round(
-            trigger[channel]['lower_hysteresis'] * ADC_scaling))
+            upper_threshold = int(round(
+                trigger[channel]['upper_threshold'] * ADC_scaling))
+            upper_thld_hyst = int(round(
+                trigger[channel]['upper_hysteresis'] * ADC_scaling))
+            lower_threshold = int(round(
+                trigger[channel]['lower_threshold'] * ADC_scaling))
+            lower_thld_hyst = int(round(
+                trigger[channel]['lower_hysteresis'] * ADC_scaling))
 
-        # ideally:
-        # cap_abs = lambda x: (
-        #    x if abs(x) < max_val else int(copysign(max_val, x)))
-        #
-        # Lambdas aren't possible in cdefs, so we work around that
-        x = upper_threshold
-        trigger_properties[n].thresholdUpper = (
-                x if abs(x) < max_val else int(copysign(max_val, x)))
+            # ideally:
+            # cap_abs = lambda x: (
+            #    x if abs(x) < max_val else int(copysign(max_val, x)))
+            #
+            # Lambdas aren't possible in cdefs, so we work around that
+            x = upper_threshold
+            trigger_properties[n].thresholdUpper = (
+                    x if abs(x) < max_val else int(copysign(max_val, x)))
 
-        x = upper_thld_hyst
-        trigger_properties[n].thresholdUpperHysteresis = (
-                x if abs(x) < max_val else max_val)
+            x = upper_thld_hyst
+            trigger_properties[n].thresholdUpperHysteresis = (
+                    x if abs(x) < max_val else max_val)
 
-        x = lower_threshold
-        trigger_properties[n].thresholdLower = (
-                x if abs(x) < max_val else int(copysign(max_val, x)))
+            x = lower_threshold
+            trigger_properties[n].thresholdLower = (
+                    x if abs(x) < max_val else int(copysign(max_val, x)))
 
-        x = lower_thld_hyst
-        trigger_properties[n].thresholdLowerHysteresis = (
-                x if abs(x) < max_val else max_val)
+            x = lower_thld_hyst
+            trigger_properties[n].thresholdLowerHysteresis = (
+                    x if abs(x) < max_val else max_val)
 
-        trigger_properties[n].channel = channel_dict[channel]
-        trigger_properties[n].thresholdMode = (
-                trigger[channel]['threshold_mode'])
+            trigger_properties[n].channel = channel_dict[channel]
+            trigger_properties[n].thresholdMode = (
+                    trigger[channel]['threshold_mode'])
 
-    with nogil:
-        status = ps4000SetTriggerChannelProperties(handle, 
-                trigger_properties, n_properties, 0, autotrigger_timeout_ms)
+        with nogil:
+            status = ps4000SetTriggerChannelProperties(handle, 
+                    trigger_properties, n_properties, 0, autotrigger_timeout_ms)
 
-    free(trigger_properties)
+    finally:
+        PyMem_Free(trigger_properties)
+
     check_status(status)    
 
 cdef setup_pulse_width_qualifier(short handle, trigger, 
@@ -582,28 +689,6 @@ cdef setup_pulse_width_qualifier(short handle, trigger,
     logic_variables, pwq_logic = pwq['PWQ_logic']
     cdef short n_conditions = len(pwq_logic)
 
-    cdef PWQ_CONDITIONS *pwq_conditions
-
-    pwq_conditions = <PWQ_CONDITIONS *>malloc(
-            sizeof(PWQ_CONDITIONS) * n_conditions)
-
-    # Copy in the pwq_conditions array from the pwq_logic structure
-    for n, products in enumerate(pwq_logic):
-
-        trigger_state = <TRIGGER_STATE *>&pwq_conditions[n]
-
-        for each_channel in channel_enumeration:
-
-            if each_channel in logic_variables:
-
-                channel_index = logic_variables.index(each_channel)
-
-                trigger_state[channel_enumeration[each_channel]] = (
-                        trigger_state_dict[products[channel_index]])
-            else:
-                trigger_state[channel_enumeration[each_channel]] = (
-                        trigger_state_dict[None])
-
     cdef THRESHOLD_DIRECTION PWQ_direction = pwq['PWQ_direction']
     cdef unsigned long PWQ_lower = int(
             round(pwq['PWQ_lower']/sampling_period))
@@ -612,11 +697,35 @@ cdef setup_pulse_width_qualifier(short handle, trigger,
 
     cdef PULSE_WIDTH_TYPE PWQ_type = pwq['PWQ_type']
 
-    with nogil:
-        status = ps4000SetPulseWidthQualifier(handle, pwq_conditions, 
-                n_conditions, PWQ_direction, PWQ_lower, PWQ_upper, PWQ_type)
+    cdef PWQ_CONDITIONS *pwq_conditions
+    pwq_conditions = <PWQ_CONDITIONS *>PyMem_Malloc(
+            sizeof(PWQ_CONDITIONS) * n_conditions)
 
-    free(pwq_conditions)
+    try:
+        # Copy in the pwq_conditions array from the pwq_logic structure
+        for n, products in enumerate(pwq_logic):
+
+            trigger_state = <TRIGGER_STATE *>&pwq_conditions[n]
+
+            for each_channel in channel_enumeration:
+
+                if each_channel in logic_variables:
+
+                    channel_index = logic_variables.index(each_channel)
+
+                    trigger_state[channel_enumeration[each_channel]] = (
+                            trigger_state_dict[products[channel_index]])
+                else:
+                    trigger_state[channel_enumeration[each_channel]] = (
+                            trigger_state_dict[None])
+
+        with nogil:
+            status = ps4000SetPulseWidthQualifier(handle, pwq_conditions, 
+                    n_conditions, PWQ_direction, PWQ_lower, PWQ_upper, PWQ_type)
+
+    finally:
+        PyMem_Free(pwq_conditions)
+
     check_status(status)    
 
 
@@ -644,7 +753,7 @@ cpdef get_units():
     cdef PICO_STATUS status
 
     cdef short n = 200
-    cdef char* serial_str = <char *>malloc(sizeof(char)*(n))
+    cdef char* serial_str = <char *>PyMem_Malloc(sizeof(char)*(n))
     cdef short count
 
     cdef bytes py_serial_str
@@ -658,7 +767,7 @@ cpdef get_units():
     try:
         py_serial_str = serial_str
     finally:
-        free(serial_str)
+        PyMem_Free(serial_str)
 
     if count == 0:
         unit_list = []
@@ -667,10 +776,9 @@ cpdef get_units():
 
     return unit_list
 
-
 cdef class Pico4k:
 
-    cdef short __handle
+    cdef short _handle
 
     cdef object __channels
     cdef object __channel_states
@@ -690,7 +798,7 @@ cdef class Pico4k:
         else:
             serial_str = serial
 
-        self.__handle = open_unit(serial_str)
+        self._handle = open_unit(serial_str)
 
     def __init__(self, serial=None, channel_configs={}):
 
@@ -700,13 +808,13 @@ cdef class Pico4k:
         default_trigger = ''
 
         self.__hardware_variant = get_unit_info(
-                self.__handle, pico_status.PICO_VARIANT_INFO)
+                self._handle, pico_status.PICO_VARIANT_INFO)
 
         self.__max_sampling_rate = (
                 capability_dict[self.__hardware_variant]['max_sampling_rate'])
 
         self.__serial_string = get_unit_info(
-                self.__handle, pico_status.PICO_BATCH_AND_SERIAL)
+                self._handle, pico_status.PICO_BATCH_AND_SERIAL)
 
         self.__segment_index = 0
 
@@ -748,7 +856,7 @@ cdef class Pico4k:
     def __dealloc__(self):
 
         try:
-            close_unit(self.__handle)
+            close_unit(self._handle)
         except KeyError:
             pass
 
@@ -768,7 +876,7 @@ cdef class Pico4k:
     def configure_channel(self, channel, enable=True, voltage_range='5V', 
             channel_type='DC', offset=0.0):
 
-        set_channel(self.__handle, channel, enable, voltage_range, 
+        set_channel(self._handle, channel, enable, voltage_range, 
                 channel_type, offset)
 
         self.__channel_states[channel] = (
@@ -990,7 +1098,7 @@ cdef class Pico4k:
         cdef unsigned long timebase_index = compute_timebase_index(
                 sampling_period, self.__max_sampling_rate, active_channels)
 
-        valid_period, max_samples = get_timebase(self.__handle, 
+        valid_period, max_samples = get_timebase(self._handle, 
                 timebase_index, 0, 0)
 
         # We should look to see whether we should
@@ -1006,13 +1114,13 @@ cdef class Pico4k:
             valid_period_low = valid_period
             max_samples_low = max_samples
             valid_period_high, max_samples_high = get_timebase(
-                    self.__handle, alt_timebase_index, 0, 0)
+                    self._handle, alt_timebase_index, 0, 0)
 
         elif timebase_index > min_timebase_index:
             alt_timebase_index = timebase_index - 1
 
             valid_period_low, max_samples_low = get_timebase(
-                    self.__handle, alt_timebase_index, 0, 0)
+                    self._handle, alt_timebase_index, 0, 0)
 
             valid_period_high = valid_period
             max_samples_high = max_samples
@@ -1036,7 +1144,7 @@ cdef class Pico4k:
 
     def get_scalings(self):
         
-        min_val, max_val = get_sample_limits(self.__handle)
+        min_val, max_val = get_sample_limits(self._handle)
         scalings = {}
         
         for channel in self.__channel_states:
@@ -1048,7 +1156,7 @@ cdef class Pico4k:
 
     def capture_block(self, sampling_period, post_trigger_time, 
             pre_trigger_time=0.0, autotrigger_timeout=None, 
-            downsample=1, downsample_mode='NONE', 
+            number_of_frames=1, downsample=1, downsample_mode='NONE', 
             return_scaled_array=True):
         '''Capture a block of data.
 
@@ -1115,22 +1223,27 @@ cdef class Pico4k:
                     (2**(8*sizeof(long) - 1)/1e3, 
                         float(autotrigger_timeout)))
 
-        setup_trigger(self.__handle, self.__trigger, self.__channel_states,
+        setup_trigger(self._handle, self.__trigger, self.__channel_states,
                 sampling_period, autotrigger_timeout_ms)
 
         segment_index = 0
 
-        run_block(self.__handle, pre_trigger_samples, post_trigger_samples,
-                timebase_index, segment_index)
+        run_block(self._handle, pre_trigger_samples, post_trigger_samples,
+                timebase_index, segment_index, number_of_frames)
 
         cdef unsigned long _downsample = downsample
         cdef RATIO_MODE _downsample_mode = (
                 downsampling_modes[downsample_mode])
 
-        data, overflow = get_data(self.__handle, data_channels, n_samples,
-                _downsample, _downsample_mode)
+        if number_of_frames == 1:
+            data, overflow = get_data(self._handle, data_channels, 
+                    n_samples, _downsample, _downsample_mode)
+        else:
+            data, overflow = get_data_bulk(self._handle, data_channels, 
+                    n_samples, _downsample, _downsample_mode, 
+                    number_of_frames)
 
-        stop_scope(self.__handle)
+        stop_scope(self._handle)
 
         scalings = self.get_scalings()
 

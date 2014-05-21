@@ -29,6 +29,7 @@ except ImportError:
 try:
     from .pico4k import Pico4k
 except ImportError:
+    print 'faileed :('
     pass
 
 from triggers import (
