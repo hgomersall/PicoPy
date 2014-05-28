@@ -306,7 +306,7 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
     cdef PICO_STATUS status
     cdef bint blocking = True
     
-    cdef long time_indisposed_ms
+    cdef long time_indisposed_ms = 0
 
     cdef long max_samples_per_segment
     with nogil:
