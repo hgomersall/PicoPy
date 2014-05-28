@@ -8,7 +8,7 @@ cpdef check_status(unsigned long pico_status)
 #    ctypedef unsigned long PICO_INFO
 #    ctypedef unsigned long PICO_STATUS
 
-cdef extern from 'picoStatus.h':
+cdef extern from 'PicoStatus.h':
     ctypedef unsigned long PICO_INFO
     ctypedef unsigned long PICO_STATUS
 

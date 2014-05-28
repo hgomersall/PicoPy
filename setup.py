@@ -30,15 +30,18 @@ include_dirs = [numpy.get_include()]
 library_dirs = []
 package_data = {}
 
+include_dirs.append(os.path.join('include', '4k'))
+
 if get_platform() == 'win32':
     #libraries = ['PS3000a']
     libraries = ['PS4000']
     include_dirs.append('picopy')
-    include_dirs.append(os.path.join('include', '4k'))
     library_dirs.append(os.path.join(os.getcwd(),'picopy'))
     package_data['picopy'] = ['PS4000.dll', 'PicoIpp.dll']
 else:
-    libraries = ['ps3000a', 'usb_pico-1.0']
+    #libraries = ['ps3000a', 'usb_pico-1.0']
+    library_dirs.append('/opt/picoscope/lib')
+    libraries = ['ps4000']
 
 
 ext_modules = [
