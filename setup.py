@@ -48,7 +48,9 @@ if get_platform() in ('win32', 'win-amd64'):
     library_dirs.append(os.path.join(os.getcwd(),'picopy'))
     package_data['picopy'] = ['PS4000.dll', 'PicoIpp.dll', 'PS4000.lib']
 else:
-    libraries = ['ps3000a', 'usb_pico-1.0']
+    library_dirs.append(os.path.join('/', 'opt', 'picoscope', 'lib'))
+    libraries = ['ps4000']
+    #libraries = ['ps3000a', 'usb_pico-1.0']
 
 class custom_build_ext(build_ext):
     def finalize_options(self):

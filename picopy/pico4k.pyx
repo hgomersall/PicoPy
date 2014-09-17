@@ -141,6 +141,13 @@ default_pwq_properties = frozendict({
     'PWQ_type': 'NONE',
     'PWQ_direction': 'NONE',})
 
+time_units = frozendict({
+    PS4000_FS: 1e-15,
+    PS4000_PS: 1e-12,
+    PS4000_NS: 1e-9,
+    PS4000_US: 1e-6,
+    PS4000_MS: 1e-3,
+    PS4000_S: 1.0})
 
 cdef open_unit(char *serial_str):
     cdef PICO_STATUS status
@@ -397,7 +404,6 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
     where N is the number of channels.
 
     '''
-    
     cdef PICO_STATUS status
     cdef PS4000_CHANNEL _channel
     cdef short * _buffer
@@ -411,15 +417,15 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
     if (downsample_mode == RATIO_MODE_AVERAGE):
         _samples = int(math.ceil(samples/downsample))
 
-    full_array = np.zeros((n_channels, _samples), dtype='int16')
+    full_array = np.zeros((n_channels, 1, _samples), dtype='int16')
     
     data_dict = {}
 
     for n, channel in enumerate(channels):
 
-        channel_array = full_array[n, :]
+        channel_array = full_array[n, :, :]
         _channel = channel_dict[channel]
-        _buffer = <short *>np.PyArray_DATA(channel_array)
+        _buffer = <short *>np.PyArray_DATA(channel_array[0, :])
 
         with nogil:
             # differs from 3k:
@@ -436,6 +442,20 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
     cdef unsigned long start_index = 0
     cdef short overflow
 
+    # Setup the arrays for the trigger time (it's an array to maintain
+    # shape consistency with the bulk data capture).
+    cdef PS4000_TIME_UNITS _trigger_time_units
+
+    _np_int_trigger_times = np.empty((1,), dtype='int64')
+
+    trigger_times = np.empty((1,), dtype='float64')
+
+    cdef int64_t* _int_trigger_times = <int64_t *>np.PyArray_DATA(
+            _np_int_trigger_times)
+
+    cdef double* _float_trigger_times = <double *>np.PyArray_DATA(
+            trigger_times)
+
     cdef unsigned long n_samples = _samples
 
     with nogil:
@@ -448,23 +468,39 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
     if not n_samples == _samples:
         raise IOError('The expected number of samples were not returned.')
 
+    with nogil:
+        status = ps4000GetTriggerTimeOffset64(handle,
+                _int_trigger_times, &_trigger_time_units, segment_index)
+        
+    check_status(status)
+
     overflow_dict = {}
     for channel in channels:
         overflow_dict[channel] = bool(
                 1 << channel_enumeration[channel] & overflow)
 
-    return (data_dict, overflow_dict)
+    # Convert the trigger time from int64 picoseconds to 
+    # float seconds and write back to the trigger_times array 
+    # (pointed to by _float_trigger_times)
+    _float_trigger_times[0] = (<float>_int_trigger_times[0] * 
+                    time_units[_trigger_time_units])
+
+    return (data_dict, overflow_dict, trigger_times)
 
 cdef get_data_bulk(short handle, channels, samples, unsigned long downsample, 
         RATIO_MODE downsample_mode, unsigned short number_of_captures):
     '''Get the data associated with the given channels, and return a
     tuple containing a dictionary of samples length numpy arrays (as
-    the first element) and a dictionary of bools indicating whether
-    the scope channel overflowed during the capture.
+    the first element), a dictionary of bools indicating whether
+    the scope channel overflowed during the capture, and an array
+    of times denoting the offset of the trigger from the beginning of
+    the capture.
 
     Each channel is a view into an N x samples length block of memory,
     where N is the number of channels.
 
+    The returned times are a floating point array of seconds 
+    (which are derived from 64-bit integers of picoseconds).
     '''
     
     cdef PICO_STATUS status
@@ -510,6 +546,22 @@ cdef get_data_bulk(short handle, channels, samples, unsigned long downsample,
     cdef short* _overflow = <short *>PyMem_Malloc(
             sizeof(short)*(number_of_captures))
 
+    # Set up the arrays for getting the trigger times
+    cdef PS4000_TIME_UNITS* _trigger_time_units = (
+            <PS4000_TIME_UNITS *>PyMem_Malloc(
+                sizeof(PS4000_TIME_UNITS)*number_of_captures))
+
+    _np_int_trigger_times = np.empty((number_of_captures,),
+            dtype='int64')
+
+    trigger_times = np.empty((number_of_captures,), dtype='float64')
+
+    cdef int64_t* _int_trigger_times = <int64_t *>np.PyArray_DATA(
+            _np_int_trigger_times)
+
+    cdef double* _float_trigger_times = <double *>np.PyArray_DATA(
+            trigger_times)
+
     cdef int this_channel
 
     try:
@@ -525,6 +577,14 @@ cdef get_data_bulk(short handle, channels, samples, unsigned long downsample,
         if n_samples_fail:
             raise IOError('The expected number of samples were not returned.')
 
+        with nogil:
+            status = ps4000GetValuesTriggerTimeOffsetBulk64(handle,
+                    _int_trigger_times, _trigger_time_units, 0, 
+                    number_of_captures-1)
+
+
+        check_status(status)
+
         overflow_dict = {}
         for channel in channels:
             this_channel = channel_enumeration[channel]
@@ -534,10 +594,18 @@ cdef get_data_bulk(short handle, channels, samples, unsigned long downsample,
 
             overflow_dict[channel] = bool(any_overflow)
 
+        # Convert the trigger times from int64 picoseconds to 
+        # float seconds and write back to the trigger_times array 
+        # (pointed to by _float_trigger_times)
+        for i in range(number_of_captures):
+            _float_trigger_times[i] = (<float>_int_trigger_times[i] * 
+                    time_units[_trigger_time_units[i]])
+
     finally:
         PyMem_Free(_overflow)
+        PyMem_Free(_trigger_time_units)
 
-    return (data_dict, overflow_dict)
+    return (data_dict, overflow_dict, trigger_times)
 
 
 cdef stop_scope(short handle):
@@ -1236,11 +1304,11 @@ cdef class Pico4k:
                 downsampling_modes[downsample_mode])
 
         if number_of_frames == 1:
-            data, overflow = get_data(self._handle, data_channels, 
-                    n_samples, _downsample, _downsample_mode)
+            data, overflow, trigger_times = get_data(self._handle, 
+                    data_channels, n_samples, _downsample, _downsample_mode)
         else:
-            data, overflow = get_data_bulk(self._handle, data_channels, 
-                    n_samples, _downsample, _downsample_mode, 
+            data, overflow, trigger_times = get_data_bulk(self._handle, 
+                    data_channels, n_samples, _downsample, _downsample_mode, 
                     number_of_frames)
 
         stop_scope(self._handle)
