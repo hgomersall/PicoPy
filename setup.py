@@ -18,7 +18,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #
 
-from distutils.core import setup
+from setuptools import setup
 from distutils.extension import Extension
 from distutils.util import get_platform
 from distutils.ccompiler import get_default_compiler

@@ -26,11 +26,7 @@ try:
 except ImportError:
     pass
 
-try:
-    from .pico4k import Pico4k
-except ImportError:
-    print 'faileed :('
-    pass
+from .pico4k import Pico4k
 
 from triggers import (
         EdgeTrigger,
