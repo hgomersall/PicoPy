@@ -132,15 +132,16 @@ cdef extern from 'ps4000Api.h':
         MAX_SWEEP_TYPES
 
     ctypedef enum WAVE_TYPE:
-        SINE
-        SQUARE
-        TRIANGLE
-        RAMP_UP
-        RAMP_DOWN
-        SINC
-        GAUSSIAN
-        HALF_SINE
-        DC_VOLTAGE
+        PS4000_SINE
+        PS4000_SQUARE
+        PS4000_TRIANGLE
+        PS4000_RAMP_UP
+        PS4000_RAMP_DOWN
+        PS4000_SINC
+        PS4000_GAUSSIAN
+        PS4000_HALF_SINE
+        PS4000_DC_VOLTAGE
+        PS4000_WHITE_NOISE
         MAX_WAVE_TYPES
 
     ctypedef enum SIGGEN_TRIG_TYPE:

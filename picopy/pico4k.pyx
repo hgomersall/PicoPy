@@ -101,6 +101,19 @@ threshold_direction_dict = frozendict({
     'NONE': NONE,
     None: NONE,})
 
+siggen_trigger_types = frozendict({
+    'RISING': SIGGEN_RISING,
+    'FALLING': SIGGEN_FALLING,
+    'GATE_HIGH': SIGGEN_GATE_HIGH,
+    'GATE_LOW': SIGGEN_GATE_LOW,})
+
+siggen_trigger_source = frozendict({
+    'NONE': SIGGEN_NONE,
+    'SCOPE_TRIG': SIGGEN_SCOPE_TRIG,
+    'AUX_IN': SIGGEN_AUX_IN,
+    'EXT_IN': SIGGEN_EXT_IN,
+    'SOFT_TRIG': SIGGEN_SOFT_TRIG})
+
 threshold_mode_dict = frozendict({
     'LEVEL': LEVEL,
     'WINDOW': WINDOW})
