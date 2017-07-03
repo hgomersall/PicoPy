@@ -3,35 +3,36 @@
 #
 
 from pico_status cimport PICO_STATUS, PICO_INFO
-from libc.stdint cimport int64_t, uint64_t
+from libc.stdint cimport (
+    int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t)
 
 # Simple constants replicated from ps4000Api.h
 
 cdef extern from 'ps4000Api.h':
     cdef int PS4000A_MAX_OVERSAMPLE_12BIT = 16
     cdef int PS4000A_MAX_OVERSAMPLE_8BIT = 256
-    
+
     cdef int PS4XXX_MAX_ETS_CYCLES = 250
     cdef int PS4XXX_MAX_INTERLEAVE = 50
-    
+
     cdef int PS4000_MAX_VALUE = 32764
     cdef int PS4000_MIN_VALUE = -32764
     cdef int PS4000_LOST_DATA = -32768
 
     cdef int PS4000_EXT_MAX_VALUE = 32767
     cdef int PS4000_EXT_MIN_VALUE = -32767
-    
+
     cdef int MAX_PULSE_WIDTH_QUALIFIER_COUNT = 16777215
     cdef int MAX_DELAY_COUNT = 8388607
-    
+
     cdef float MIN_SIG_GEN_FREQ = 0.0
     cdef float MAX_SIG_GEN_FREQ = 2000000.0
-    
+
     cdef int MAX_SIG_GEN_BUFFER_SIZE = 8192
     cdef int MIN_SIG_GEN_BUFFER_SIZE = 10
     cdef int MIN_DWELL_COUNT = 10
     cdef int MAX_SWEEPS_SHOTS = 536870912 #((1 << 30) - 1)
-    
+
     cdef float PS4000_SINE_MAX_FREQUENCY = 2000000.0
     cdef float PS4000_SQUARE_MAX_FREQUENCY = 2000000.0
     cdef float PS4000_TRIANGLE_MAX_FREQUENCY = 2000000.0
@@ -98,7 +99,7 @@ cdef extern from 'ps4000Api.h':
        P_PRESSURE_SENSOR_5BAR
        P_OPTICAL_SWITCH
        P_UNKNOWN
-       P_MAX_PROBES = P_UNKNOWN 
+       P_MAX_PROBES = P_UNKNOWN
 
 
     ctypedef enum PS4000_CHANNEL_INFO:
@@ -167,7 +168,7 @@ cdef extern from 'ps4000Api.h':
 
     ctypedef enum THRESHOLD_DIRECTION:
         ABOVE #using upper threshold
-        BELOW 
+        BELOW
         RISING # using upper threshold
         FALLING # using upper threshold
         RISING_OR_FALLING # using both threshold
@@ -177,16 +178,16 @@ cdef extern from 'ps4000Api.h':
         FALLING_LOWER # using upper threshold
 
         # Windowing using both thresholds
-        INSIDE = ABOVE 
+        INSIDE = ABOVE
         OUTSIDE = BELOW
-        ENTER = RISING 
-        EXIT = FALLING 
+        ENTER = RISING
+        EXIT = FALLING
         ENTER_OR_EXIT = RISING_OR_FALLING
         POSITIVE_RUNT = 9
         NEGATIVE_RUNT
 
         # no trigger set
-        NONE = RISING 
+        NONE = RISING
 
     ctypedef enum TRIGGER_STATE:
         CONDITION_DONT_CARE
@@ -212,10 +213,10 @@ cdef extern from 'ps4000Api.h':
         TRIGGER_STATE aux
 
     ctypedef struct TRIGGER_CHANNEL_PROPERTIES:
-        short thresholdUpper
-        unsigned short thresholdUpperHysteresis 
-        short thresholdLower
-        unsigned short thresholdLowerHysteresis
+        int16_t thresholdUpper
+        uint16_t thresholdUpperHysteresis
+        int16_t thresholdLower
+        uint16_t thresholdLowerHysteresis
         PS4000_CHANNEL channel
         THRESHOLD_MODE thresholdMode
 
@@ -239,352 +240,352 @@ cdef extern from 'ps4000Api.h':
         FC_2K
 
     ctypedef void (*ps4000BlockReady)(
-            short handle, PICO_STATUS status, void *pParameter) nogil
+            int16_t handle, PICO_STATUS status, void *pParameter) nogil
 
     ctypedef void (*ps4000StreamingReady)(
-            short handle,
-            long noOfSamples,
-            unsigned long startIndex,
-            short overflow,
-            unsigned long triggerAt,
-            short triggered,
-            short autoStop,
+            int16_t handle,
+            int32_t noOfSamples,
+            uint32_t startIndex,
+            int16_t overflow,
+            uint32_t triggerAt,
+            int16_t triggered,
+            int16_t autoStop,
             void * pParameter) nogil
 
     ctypedef void (*ps4000DataReady)(
-            short handle,
-            unsigned long noOfSamples,
-            short overflow,
-            unsigned long triggerAt,
-            short triggered,
+            int16_t handle,
+            uint32_t noOfSamples,
+            int16_t overflow,
+            uint32_t triggerAt,
+            int16_t triggered,
             void * pParameter) nogil
 
     PICO_STATUS ps4000OpenUnit(
-            short * handle) nogil
+            int16_t * handle) nogil
 
     PICO_STATUS ps4000OpenUnitAsync(
-            short * status) nogil
- 
+            int16_t * status) nogil
+
     PICO_STATUS ps4000OpenUnitEx(
-            short * handle,
+            int16_t * handle,
             char * serial) nogil
 
     PICO_STATUS ps4000OpenUnitAsyncEx(
-            short * status,
+            int16_t * status,
             char * serial) nogil
 
     PICO_STATUS ps4000OpenUnitProgress(
-            short * handle,
-            short * progressPercent,
-            short * complete) nogil 
+            int16_t * handle,
+            int16_t * progressPercent,
+            int16_t * complete) nogil
 
     PICO_STATUS ps4000GetUnitInfo(
-            short handle, 
+            int16_t handle,
             char * string,
-            short stringLength,
-            short * requiredSize,
+            int16_t stringLength,
+            int16_t * requiredSize,
             PICO_INFO info) nogil
 
     PICO_STATUS ps4000FlashLed(
-            short handle,
-            short start) nogil
-    
+            int16_t handle,
+            int16_t start) nogil
+
     PICO_STATUS ps4000CloseUnit(
-            short handle) nogil
-    
+            int16_t handle) nogil
+
     PICO_STATUS ps4000MemorySegments(
-            short handle,
-            unsigned short nSegments,
-            long * nMaxSamples) nogil
-    
+            int16_t handle,
+            uint16_t nSegments,
+            int32_t * nMaxSamples) nogil
+
     PICO_STATUS ps4000SetChannel(
-            short handle,
+            int16_t handle,
             PS4000_CHANNEL channel,
-            short enabled,
-            short dc, 
+            int16_t enabled,
+            int16_t dc,
             PS4000_RANGE range) nogil
 
     PICO_STATUS ps4000SetNoOfCaptures(
-            short handle,
-            unsigned short nCaptures) nogil
-    
+            int16_t handle,
+            uint16_t nCaptures) nogil
+
     PICO_STATUS ps4000GetTimebase(
-            short handle,
-            unsigned long timebase,
-            long noSamples,
-            long * timeIntervalNanoseconds,
-            short oversample,
-            long * maxSamples,
-            unsigned short segmentIndex) nogil
-    
+            int16_t handle,
+            uint32_t timebase,
+            int32_t noSamples,
+            int32_t * timeIntervalNanoseconds,
+            int16_t oversample,
+            int32_t * maxSamples,
+            uint16_t segmentIndex) nogil
+
     PICO_STATUS ps4000GetTimebase2(
-            short handle,
-            unsigned long timebase,
-            long noSamples,
+            int16_t handle,
+            uint32_t timebase,
+            int32_t noSamples,
             float * timeIntervalNanoseconds,
-            short oversample,
-            long * maxSamples,
-            unsigned short segmentIndex) nogil
-    
+            int16_t oversample,
+            int32_t * maxSamples,
+            uint16_t segmentIndex) nogil
+
     PICO_STATUS ps4000SetSigGenArbitrary(
-            short handle,
-            long offsetVoltage,
-            unsigned long pkToPk,
-            unsigned long startDeltaPhase,
-            unsigned long stopDeltaPhase,
-            unsigned long deltaPhaseIncrement, 
-            unsigned long dwellCount,
-            short * arbitraryWaveform, 
-            long arbitraryWaveformSize,
+            int16_t handle,
+            int32_t offsetVoltage,
+            uint32_t pkToPk,
+            uint32_t startDeltaPhase,
+            uint32_t stopDeltaPhase,
+            uint32_t deltaPhaseIncrement,
+            uint32_t dwellCount,
+            int16_t * arbitraryWaveform,
+            int32_t arbitraryWaveformSize,
             SWEEP_TYPE sweepType,
-            short whiteNoise,
+            int16_t whiteNoise,
             INDEX_MODE indexMode,
-            unsigned long shots,
-            unsigned long sweeps,
+            uint32_t shots,
+            uint32_t sweeps,
             SIGGEN_TRIG_TYPE triggerType,
             SIGGEN_TRIG_SOURCE triggerSource,
-            short extInThreshold) nogil
-    
+            int16_t extInThreshold) nogil
+
     PICO_STATUS ps4000SetSigGenBuiltIn(
-            short handle,
-            long offsetVoltage,
-            unsigned long pkToPk,
-            short waveType,
+            int16_t handle,
+            int32_t offsetVoltage,
+            uint32_t pkToPk,
+            int16_t waveType,
             float startFrequency,
             float stopFrequency,
             float increment,
             float dwellTime,
             SWEEP_TYPE sweepType,
-            short whiteNoise,
-            unsigned long shots,
-            unsigned long sweeps,
+            int16_t whiteNoise,
+            uint32_t shots,
+            uint32_t sweeps,
             SIGGEN_TRIG_TYPE triggerType,
             SIGGEN_TRIG_SOURCE triggerSource,
-            short extInThreshold) nogil
-    
+            int16_t extInThreshold) nogil
+
     PICO_STATUS ps4000SigGenSoftwareControl(
-            short handle,
-            short state) nogil
-    
+            int16_t handle,
+            int16_t state) nogil
+
     PICO_STATUS ps4000SetEts(
-            short handle,
+            int16_t handle,
             PS4000_ETS_MODE mode,
-            short etsCycles,
-            short etsInterleave,
-            long * sampleTimePicoseconds) nogil
-    
+            int16_t etsCycles,
+            int16_t etsInterleave,
+            int32_t * sampleTimePicoseconds) nogil
+
     PICO_STATUS ps4000SetSimpleTrigger(
-            short handle,
-            short enable,
+            int16_t handle,
+            int16_t enable,
             PS4000_CHANNEL source,
-            short threshold,
+            int16_t threshold,
             THRESHOLD_DIRECTION direction,
-            unsigned long delay,
-            short autoTrigger_ms) nogil
-    
+            uint32_t delay,
+            int16_t autoTrigger_ms) nogil
+
     PICO_STATUS ps4000SetTriggerChannelProperties(
-            short handle,
+            int16_t handle,
             TRIGGER_CHANNEL_PROPERTIES * channelProperties,
-            short nChannelProperties,
-            short auxOutputEnable,
-            long autoTriggerMilliseconds) nogil
-    
+            int16_t nChannelProperties,
+            int16_t auxOutputEnable,
+            int32_t autoTriggerMilliseconds) nogil
+
     PICO_STATUS ps4000SetTriggerChannelConditions(
-            short handle,
+            int16_t handle,
             TRIGGER_CONDITIONS * conditions,
-            short nConditions) nogil
-    
+            int16_t nConditions) nogil
+
     PICO_STATUS ps4000SetTriggerChannelDirections(
-            short handle,
+            int16_t handle,
             THRESHOLD_DIRECTION channelA,
             THRESHOLD_DIRECTION channelB,
             THRESHOLD_DIRECTION channelC,
             THRESHOLD_DIRECTION channelD,
             THRESHOLD_DIRECTION ext,
             THRESHOLD_DIRECTION aux) nogil
-    
+
     PICO_STATUS ps4000SetTriggerDelay(
-            short handle,
-            unsigned long delay) nogil
-    
+            int16_t handle,
+            uint32_t delay) nogil
+
     PICO_STATUS ps4000SetPulseWidthQualifier(
-            short handle,
+            int16_t handle,
             PWQ_CONDITIONS * conditions,
-            short nConditions,
+            int16_t nConditions,
             THRESHOLD_DIRECTION direction,
-            unsigned long lower,
-            unsigned long upper,
+            uint32_t lower,
+            uint32_t upper,
             PULSE_WIDTH_TYPE type) nogil
-    
+
     PICO_STATUS ps4000IsTriggerOrPulseWidthQualifierEnabled(
-            short handle,
-            short * triggerEnabled,
-            short * pulseWidthQualifierEnabled) nogil
-    
+            int16_t handle,
+            int16_t * triggerEnabled,
+            int16_t * pulseWidthQualifierEnabled) nogil
+
     PICO_STATUS ps4000GetTriggerTimeOffset(
-            short handle,
-            unsigned long * timeUpper,
-            unsigned long * timeLower,
+            int16_t handle,
+            uint32_t * timeUpper,
+            uint32_t * timeLower,
             PS4000_TIME_UNITS * timeUnits,
-            unsigned short segmentIndex ) nogil
-    
+            uint16_t segmentIndex ) nogil
+
     PICO_STATUS ps4000GetTriggerTimeOffset64(
-            short handle,
+            int16_t handle,
             int64_t * time,
             PS4000_TIME_UNITS * timeUnits,
-            unsigned short segmentIndex ) nogil
-    
+            uint16_t segmentIndex ) nogil
+
     PICO_STATUS ps4000GetValuesTriggerTimeOffsetBulk(
-            short handle,
-            unsigned long * timesUpper,
-            unsigned long * timesLower,
+            int16_t handle,
+            uint32_t * timesUpper,
+            uint32_t * timesLower,
             PS4000_TIME_UNITS * timeUnits,
-            unsigned short fromSegmentIndex,
-            unsigned short toSegmentIndex) nogil
-    
+            uint16_t fromSegmentIndex,
+            uint16_t toSegmentIndex) nogil
+
     PICO_STATUS ps4000GetValuesTriggerTimeOffsetBulk64(
-            short handle,
+            int16_t handle,
             int64_t * times,
             PS4000_TIME_UNITS * timeUnits,
-            unsigned short fromSegmentIndex,
-            unsigned short toSegmentIndex) nogil
-    
+            uint16_t fromSegmentIndex,
+            uint16_t toSegmentIndex) nogil
+
     PICO_STATUS ps4000SetDataBufferBulk(
-            short handle,
+            int16_t handle,
             PS4000_CHANNEL channel,
-            short *buffer,
-            long bufferLth,
-            unsigned short waveform) nogil
+            int16_t *buffer,
+            int32_t bufferLth,
+            uint16_t waveform) nogil
 
     PICO_STATUS ps4000SetDataBuffers(
-            short handle,
+            int16_t handle,
             PS4000_CHANNEL channel,
-            short * bufferMax,
-            short * bufferMin,
-            long bufferLth) nogil
-    
+            int16_t * bufferMax,
+            int16_t * bufferMin,
+            int32_t bufferLth) nogil
+
     PICO_STATUS ps4000SetDataBufferWithMode(
-            short handle,
+            int16_t handle,
             PS4000_CHANNEL channel,
-            short * buffer,
-            long bufferLth,
+            int16_t * buffer,
+            int32_t bufferLth,
             RATIO_MODE mode) nogil
 
     PICO_STATUS ps4000SetDataBuffersWithMode(
-            short handle,
+            int16_t handle,
             PS4000_CHANNEL channel,
-            short * bufferMax,
-            short * bufferMin,
-            long bufferLth,
+            int16_t * bufferMax,
+            int16_t * bufferMin,
+            int32_t bufferLth,
             RATIO_MODE mode) nogil
-    
+
     PICO_STATUS ps4000SetEtsTimeBuffer(
-            short handle,
+            int16_t handle,
             int64_t * buffer,
-            long bufferLth) nogil
-    
+            int32_t bufferLth) nogil
+
     PICO_STATUS ps4000SetEtsTimeBuffers(
-            short handle,
-            unsigned long * timeUpper,
-            unsigned long * timeLower,
-            long bufferLth) nogil
-    
+            int16_t handle,
+            uint32_t * timeUpper,
+            uint32_t * timeLower,
+            int32_t bufferLth) nogil
+
     PICO_STATUS ps4000IsReady(
-            short handle,
-            short * ready) nogil
-    
+            int16_t handle,
+            int16_t * ready) nogil
+
     PICO_STATUS ps4000RunBlock(
-            short handle,
-            long noOfPreTriggerSamples,
-            long noOfPostTriggerSamples,
-            unsigned long timebase,
-            short oversample,
-            long * timeIndisposedMs,
-            unsigned short segmentIndex,
+            int16_t handle,
+            int32_t noOfPreTriggerSamples,
+            int32_t noOfPostTriggerSamples,
+            uint32_t timebase,
+            int16_t oversample,
+            int32_t * timeIndisposedMs,
+            uint16_t segmentIndex,
             ps4000BlockReady lpReady,
             void * pParameter) nogil
-    
+
     PICO_STATUS ps4000RunStreaming(
-            short handle,
-            unsigned long * sampleInterval, 
+            int16_t handle,
+            uint32_t * sampleInterval,
             PS4000_TIME_UNITS sampleIntervalTimeUnits,
-            unsigned long maxPreTriggerSamples,
-            unsigned long maxPostPreTriggerSamples,
-            short autoStop,
-            unsigned long downSampleRatio,
-            unsigned long overviewBufferSize) nogil
+            uint32_t maxPreTriggerSamples,
+            uint32_t maxPostPreTriggerSamples,
+            int16_t autoStop,
+            uint32_t downSampleRatio,
+            uint32_t overviewBufferSize) nogil
 
     PICO_STATUS ps4000RunStreamingEx(
-            short handle,
-            unsigned long * sampleInterval, 
+            int16_t handle,
+            uint32_t * sampleInterval,
             PS4000_TIME_UNITS sampleIntervalTimeUnits,
-            unsigned long maxPreTriggerSamples,
-            unsigned long maxPostPreTriggerSamples,
-            short autoStop,
-            unsigned long downSampleRatio,
+            uint32_t maxPreTriggerSamples,
+            uint32_t maxPostPreTriggerSamples,
+            int16_t autoStop,
+            uint32_t downSampleRatio,
             RATIO_MODE downSampleRatioMode,
-            unsigned long overviewBufferSize) nogil
-    
+            uint32_t overviewBufferSize) nogil
+
     PICO_STATUS ps4000GetStreamingLatestValues(
-            short handle, 
+            int16_t handle,
             ps4000StreamingReady lpPs4000aReady,
-            void * pParameter) nogil 
-    
+            void * pParameter) nogil
+
     PICO_STATUS ps4000NoOfStreamingValues(
-            short handle,
-            unsigned long * noOfValues) nogil
-    
+            int16_t handle,
+            uint32_t * noOfValues) nogil
+
     PICO_STATUS ps4000GetMaxDownSampleRatio(
-            short handle,
-            unsigned long noOfUnaggreatedSamples,
-            unsigned long * maxDownSampleRatio,
+            int16_t handle,
+            uint32_t noOfUnaggreatedSamples,
+            uint32_t * maxDownSampleRatio,
             RATIO_MODE downSampleRatioMode,
-            unsigned short segmentIndex) nogil
-    
+            uint16_t segmentIndex) nogil
+
     PICO_STATUS ps4000GetValues(
-            short handle,
-            unsigned long startIndex,
-            unsigned long * noOfSamples,
-            unsigned long downSampleRatio,
+            int16_t handle,
+            uint32_t startIndex,
+            uint32_t * noOfSamples,
+            uint32_t downSampleRatio,
             RATIO_MODE downSampleRatioMode,
-            unsigned short segmentIndex,
-            short * overflow) nogil
-    
+            uint16_t segmentIndex,
+            int16_t * overflow) nogil
+
     PICO_STATUS ps4000GetValuesBulk(
-            short handle,
-            unsigned long * noOfSamples,
-            unsigned short fromSegmentIndex,
-            unsigned short toSegmentIndex,
-            short * overflow) nogil
-    
+            int16_t handle,
+            uint32_t * noOfSamples,
+            uint16_t fromSegmentIndex,
+            uint16_t toSegmentIndex,
+            int16_t * overflow) nogil
+
     PICO_STATUS ps4000GetValuesAsync(
-            short handle,
-            unsigned long startIndex,
-            unsigned long noOfSamples,
-            unsigned long downSampleRatio,
-            short downSampleRatioMode,
-            unsigned short segmentIndex,
+            int16_t handle,
+            uint32_t startIndex,
+            uint32_t noOfSamples,
+            uint32_t downSampleRatio,
+            int16_t downSampleRatioMode,
+            uint16_t segmentIndex,
             void * lpDataReady,
             void * pParameter) nogil
-    
+
     PICO_STATUS ps4000Stop(
-            short handle) nogil
-    
+            int16_t handle) nogil
+
     PICO_STATUS ps4000HoldOff(
-            short handle, 
+            int16_t handle,
             uint64_t holdoff,
             PS4000_HOLDOFF_TYPE type) nogil
-    
+
     PICO_STATUS ps4000GetChannelInformation(
-            short handle, 
-            PS4000_CHANNEL_INFO info, 
-            int probe, 
+            int16_t handle,
+            PS4000_CHANNEL_INFO info,
+            int probe,
             int * ranges,
             int * length,
             int channels) nogil
-    
+
     PICO_STATUS ps4000EnumerateUnits(
-            short * count,
+            int16_t * count,
             char * serials,
-            short * serialLth) nogil
-    
+            int16_t * serialLth) nogil
+

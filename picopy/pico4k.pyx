@@ -151,7 +151,7 @@ time_units = frozendict({
 
 cdef open_unit(char *serial_str):
     cdef PICO_STATUS status
-    cdef short handle
+    cdef int16_t handle
 
     with nogil:
         status = ps4000OpenUnitEx(&handle, serial_str)
@@ -161,7 +161,7 @@ cdef open_unit(char *serial_str):
 
     return handle
 
-cdef close_unit(short handle):
+cdef close_unit(int16_t handle):
     cdef PICO_STATUS status
 
     with nogil:
@@ -169,11 +169,11 @@ cdef close_unit(short handle):
 
     check_status(status)
 
-cdef get_unit_info(short handle, PICO_INFO info):
+cdef get_unit_info(int16_t handle, PICO_INFO info):
 
-    cdef short n = 20
+    cdef int16_t n = 20
     cdef char* info_str = <char *>PyMem_Malloc(sizeof(char)*(n))
-    cdef short required_n
+    cdef int16_t required_n
 
     cdef bytes py_info_str
 
@@ -201,7 +201,7 @@ cdef get_unit_info(short handle, PICO_INFO info):
 
     return py_info_str
 
-cdef get_sample_limits(short handle):
+cdef get_sample_limits(int16_t handle):
     #Commented stuff is as per pico3k.pyx
     #cdef short min_val
     #cdef short max_val
@@ -217,12 +217,12 @@ cdef get_sample_limits(short handle):
     #return (min_val, max_val)
     return (PS4000_MIN_VALUE, PS4000_MAX_VALUE)
 
-cdef set_channel(short handle, channel, bint enable,
+cdef set_channel(int16_t handle, channel, bint enable,
         voltage_range, channel_type, float analogue_offset):
 
     # NOTE in the 4k case, analogue_offset is ignored
     cdef PICO_STATUS status
-    cdef short _enable = enable
+    cdef int16_t _enable = enable
     cdef PS4000_CHANNEL _channel = channel_dict[channel]
     cdef PS4000_COUPLING _channel_type = channel_type_dict[channel_type]
     cdef PS4000_RANGE _voltage_range = voltage_range_dict[voltage_range]
@@ -233,11 +233,11 @@ cdef set_channel(short handle, channel, bint enable,
 
     check_status(status)
 
-cdef get_timebase(short handle, unsigned long timebase_index,
-        long no_samples, unsigned short segment_index):
+cdef get_timebase(int16_t handle, uint32_t timebase_index,
+        int32_t no_samples, uint16_t segment_index):
 
     cdef float time_interval
-    cdef long max_samples
+    cdef int32_t max_samples
     cdef PICO_STATUS status
 
     with nogil:
@@ -254,7 +254,7 @@ cdef get_minimum_timebase_index(active_channels):
     '''
     return int(math.ceil(math.log(active_channels, 2)))
 
-cdef unsigned long compute_timebase_index(
+cdef uint32_t compute_timebase_index(
         float sampling_period, float sampling_rate,
         int active_channels):
     '''Round the sampling period to the nearest valid sampling period and
@@ -264,8 +264,8 @@ cdef unsigned long compute_timebase_index(
     possible, return either 0 or the maximum index respectively.
     '''
 
-    cdef unsigned long timebase_index_low
-    cdef unsigned long timebase_index
+    cdef uint32_t timebase_index_low
+    cdef uint32_t timebase_index
 
     min_timebase_index = get_minimum_timebase_index(active_channels)
 
@@ -306,16 +306,16 @@ cdef unsigned long compute_timebase_index(
 
     return timebase_index
 
-cdef run_block(short handle, long no_of_pretrigger_samples,
-        long no_of_posttrigger_samples, unsigned long timebase_index,
-        unsigned short segment_index, unsigned short number_of_captures):
+cdef run_block(int16_t handle, int32_t no_of_pretrigger_samples,
+        int32_t no_of_posttrigger_samples, uint32_t timebase_index,
+        uint16_t segment_index, uint16_t number_of_captures):
 
     cdef PICO_STATUS status
     cdef bint blocking = True
 
-    cdef long time_indisposed_ms = 0
+    cdef int32_t time_indisposed_ms = 0
 
-    cdef long max_samples_per_segment = 0
+    cdef int32_t max_samples_per_segment = 0
     with nogil:
         status = ps4000MemorySegments(handle, number_of_captures,
                 &max_samples_per_segment)
@@ -339,7 +339,7 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
                 &time_indisposed_ms, segment_index, NULL, NULL)
 
     check_status(status)
-    cdef short finished = 0
+    cdef int16_t finished = 0
 
     if blocking:
         # Sleep for the time it was expected to take (of course, this
@@ -358,14 +358,14 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
             # Sleep for another few microseconds
             time.sleep(10e-6)
 
-cdef setup_arrays(short handle, channels, samples):
+cdef setup_arrays(int16_t handle, channels, samples):
 
     cdef PICO_STATUS status
     cdef PS4000_CHANNEL _channel
-    cdef short * _buffer
-    cdef long _samples = samples
+    cdef int16_t * _buffer
+    cdef int32_t _samples = samples
     #Needed for 3k case
-    #cdef unsigned short segment_index = 0
+    #cdef uint16_t segment_index = 0
 
     n_channels = len(channels)
 
@@ -377,7 +377,7 @@ cdef setup_arrays(short handle, channels, samples):
 
         channel_array = full_array[n, :]
         _channel = channel_dict[channel]
-        _buffer = <short *>np.PyArray_DATA(channel_array)
+        _buffer = <int16_t *>np.PyArray_DATA(channel_array)
 
         with nogil:
             # differs from 3k:
@@ -393,7 +393,7 @@ cdef setup_arrays(short handle, channels, samples):
     return channel_array
 
 
-cdef get_data(short handle, channels, samples, unsigned long downsample,
+cdef get_data(int16_t handle, channels, samples, uint32_t downsample,
         RATIO_MODE downsample_mode):
     '''Get the data associated with the given channels, and return a
     tuple containing a dictionary of samples length numpy arrays (as
@@ -406,10 +406,10 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
     '''
     cdef PICO_STATUS status
     cdef PS4000_CHANNEL _channel
-    cdef short * _buffer
-    cdef long _samples = samples
+    cdef int16_t * _buffer
+    cdef int32_t _samples = samples
 
-    cdef unsigned short segment_index = 0
+    cdef uint16_t segment_index = 0
 
     n_channels = len(channels)
 
@@ -425,7 +425,7 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
 
         channel_array = full_array[n, :, :]
         _channel = channel_dict[channel]
-        _buffer = <short *>np.PyArray_DATA(channel_array[0, :])
+        _buffer = <int16_t *>np.PyArray_DATA(channel_array[0, :])
 
         with nogil:
             # differs from 3k:
@@ -439,8 +439,8 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
         data_dict[channel] = channel_array
 
 
-    cdef unsigned long start_index = 0
-    cdef short overflow
+    cdef uint32_t start_index = 0
+    cdef int16_t overflow
 
     # Setup the arrays for the trigger time (it's an array to maintain
     # shape consistency with the bulk data capture).
@@ -456,7 +456,7 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
     cdef double* _float_trigger_times = <double *>np.PyArray_DATA(
             trigger_times)
 
-    cdef unsigned long n_samples = _samples
+    cdef uint32_t n_samples = _samples
 
     with nogil:
         status = ps4000GetValues(handle, start_index, &n_samples,
@@ -487,8 +487,8 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
 
     return (data_dict, overflow_dict, trigger_times)
 
-cdef get_data_bulk(short handle, channels, samples, unsigned long downsample,
-        RATIO_MODE downsample_mode, unsigned short number_of_captures):
+cdef get_data_bulk(int16_t handle, channels, samples, uint32_t downsample,
+        RATIO_MODE downsample_mode, uint16_t number_of_captures):
     '''Get the data associated with the given channels, and return a
     tuple containing a dictionary of samples length numpy arrays (as
     the first element), a dictionary of bools indicating whether
@@ -505,9 +505,9 @@ cdef get_data_bulk(short handle, channels, samples, unsigned long downsample,
 
     cdef PICO_STATUS status
     cdef PS4000_CHANNEL _channel
-    cdef short * _buffer
-    cdef short * _single_capture_buffer
-    cdef long _samples = samples
+    cdef int16_t * _buffer
+    cdef int16_t * _single_capture_buffer
+    cdef int32_t _samples = samples
 
     n_channels = len(channels)
 
@@ -525,7 +525,7 @@ cdef get_data_bulk(short handle, channels, samples, unsigned long downsample,
 
         channel_array = full_array[n, :, :]
         _channel = channel_dict[channel]
-        _buffer = <short *>np.PyArray_DATA(channel_array)
+        _buffer = <int16_t *>np.PyArray_DATA(channel_array)
         with nogil:
             for i in range(number_of_captures):
                 _single_capture_buffer = _buffer + i*_samples
@@ -536,15 +536,15 @@ cdef get_data_bulk(short handle, channels, samples, unsigned long downsample,
 
         data_dict[channel] = channel_array
 
-    cdef unsigned long start_index = 0
-    cdef short any_overflow = 0
+    cdef uint32_t start_index = 0
+    cdef int16_t any_overflow = 0
 
-    cdef unsigned long n_samples = _samples
+    cdef uint32_t n_samples = _samples
 
     cdef bint n_samples_fail = False
 
-    cdef short* _overflow = <short *>PyMem_Malloc(
-            sizeof(short)*(number_of_captures))
+    cdef int16_t* _overflow = <int16_t *>PyMem_Malloc(
+            sizeof(int16_t)*(number_of_captures))
 
     # Set up the arrays for getting the trigger times
     cdef PS4000_TIME_UNITS* _trigger_time_units = (
@@ -608,18 +608,18 @@ cdef get_data_bulk(short handle, channels, samples, unsigned long downsample,
     return (data_dict, overflow_dict, trigger_times)
 
 
-cdef stop_scope(short handle):
+cdef stop_scope(int16_t handle):
 
     with nogil:
         status = ps4000Stop(handle)
 
     check_status(status)
 
-cdef setup_trigger_conditions(short handle, logic_sop, logic_variables):
+cdef setup_trigger_conditions(int16_t handle, logic_sop, logic_variables):
     '''Setup the trigger conditions from a sum of products and a list
     of the corresponding logic variables.
     '''
-    cdef short n_conditions = len(logic_sop)
+    cdef int16_t n_conditions = len(logic_sop)
 
     cdef TRIGGER_CONDITIONS *trigger_conditions
 
@@ -653,7 +653,7 @@ cdef setup_trigger_conditions(short handle, logic_sop, logic_variables):
     check_status(status)
 
 
-cdef setup_trigger_directions(short handle, trigger):
+cdef setup_trigger_directions(int16_t handle, trigger):
 
     directions = {}
     for channel in ['A', 'B', 'C', 'D', 'ext', 'aux']:
@@ -679,8 +679,8 @@ cdef setup_trigger_directions(short handle, trigger):
 
     check_status(status)
 
-cdef setup_trigger_properties(short handle, trigger, channel_states,
-        long autotrigger_timeout_ms):
+cdef setup_trigger_properties(int16_t handle, trigger, channel_states,
+        int32_t autotrigger_timeout_ms):
 
     cdef PICO_STATUS status
 
@@ -691,7 +691,7 @@ cdef setup_trigger_properties(short handle, trigger, channel_states,
         if trigger[channel] is not None:
             channels.append(channel)
 
-    cdef short n_properties = len(channels)
+    cdef int16_t n_properties = len(channels)
 
     cdef TRIGGER_CHANNEL_PROPERTIES *trigger_properties
     trigger_properties = <TRIGGER_CHANNEL_PROPERTIES *>PyMem_Malloc(
@@ -747,7 +747,7 @@ cdef setup_trigger_properties(short handle, trigger, channel_states,
 
     check_status(status)
 
-cdef setup_pulse_width_qualifier(short handle, trigger,
+cdef setup_pulse_width_qualifier(int16_t handle, trigger,
         float sampling_period):
 
     cdef PICO_STATUS status
@@ -755,12 +755,12 @@ cdef setup_pulse_width_qualifier(short handle, trigger,
     #Firstly, get the pulse width qualifier
     pwq = trigger['PWQ']
     logic_variables, pwq_logic = pwq['PWQ_logic']
-    cdef short n_conditions = len(pwq_logic)
+    cdef int16_t n_conditions = len(pwq_logic)
 
     cdef THRESHOLD_DIRECTION PWQ_direction = pwq['PWQ_direction']
-    cdef unsigned long PWQ_lower = int(
+    cdef uint32_t PWQ_lower = int(
             round(pwq['PWQ_lower']/sampling_period))
-    cdef unsigned long PWQ_upper = int(
+    cdef uint32_t PWQ_upper = int(
             round(pwq['PWQ_upper']/sampling_period))
 
     cdef PULSE_WIDTH_TYPE PWQ_type = pwq['PWQ_type']
@@ -802,7 +802,7 @@ cdef setup_pulse_width_qualifier(short handle, trigger,
 
 
 cdef setup_trigger(handle, trigger, channel_states,
-        float sampling_period, long autotrigger_timeout_ms):
+        float sampling_period, int32_t autotrigger_timeout_ms):
 
     # Firstly set up the channel conditions
 
@@ -824,9 +824,9 @@ cpdef get_units():
     '''
     cdef PICO_STATUS status
 
-    cdef short n = 200
+    cdef int16_t n = 200
     cdef char* serial_str = <char *>PyMem_Malloc(sizeof(char)*(n))
-    cdef short count
+    cdef int16_t count
 
     cdef bytes py_serial_str
 
@@ -848,9 +848,10 @@ cpdef get_units():
 
     return unit_list
 
+
 cdef class Pico4k:
 
-    cdef short _handle
+    cdef int16_t _handle
 
     cdef object __channels
     cdef object __channel_states
@@ -859,7 +860,7 @@ cdef class Pico4k:
     cdef object __max_sampling_rate
     cdef object __serial_string
 
-    cdef unsigned short __segment_index
+    cdef uint16_t __segment_index
 
     def __cinit__(self, serial=None, channel_configs={}):
 
@@ -1167,7 +1168,7 @@ cdef class Pico4k:
             if self.__channel_states[channel][1]:
                 active_channels += 1
 
-        cdef unsigned long timebase_index = compute_timebase_index(
+        cdef uint32_t timebase_index = compute_timebase_index(
                 sampling_period, self.__max_sampling_rate, active_channels)
 
         valid_period, max_samples = get_timebase(self._handle,
@@ -1241,6 +1242,11 @@ cdef class Pico4k:
         should fire automatically. Setting this to None or 0 means the
         trigger will never fire automatically.
 
+        ``number_of_frames`` dictates how many frames should be captured
+        each time. This is offloaded to the picoscope which captures that
+        number of frames before downloading over USB. This means the memory
+        depth should be sufficient to hold the requisite number of frames.
+
         downsample_mode dictates the mode that the pico scope uses
         to downsample the captured data and return it to the host machine.
         For every block of length ``downsample'', 'NONE' returns
@@ -1252,7 +1258,7 @@ cdef class Pico4k:
         channel.
         '''
 
-        cdef unsigned long timebase_index
+        cdef uint32_t timebase_index
 
         valid_sampling_period, max_samples = self.get_valid_sampling_period(
                 sampling_period)
@@ -1288,11 +1294,11 @@ cdef class Pico4k:
         autotrigger_timeout_ms = int(round(autotrigger_timeout * 1e3))
 
         if (autotrigger_timeout_ms < 0.0 or
-                autotrigger_timeout_ms > 2**(8*sizeof(long) - 1)):
+                autotrigger_timeout_ms > 2**(8*sizeof(int32_t) - 1)):
             raise ValueError('Invalid timeout:'
                     'The autotrigger timeout must be a positive number '
                     'of seconds, no greater than %.3f. (%.3f given)' %
-                    (2**(8*sizeof(long) - 1)/1e3,
+                    (2**(8*sizeof(int32_t) - 1)/1e3,
                         float(autotrigger_timeout)))
 
         setup_trigger(self._handle, self.__trigger, self.__channel_states,
@@ -1303,7 +1309,7 @@ cdef class Pico4k:
         run_block(self._handle, pre_trigger_samples, post_trigger_samples,
                 timebase_index, segment_index, number_of_frames)
 
-        cdef unsigned long _downsample = downsample
+        cdef uint32_t _downsample = downsample
         cdef RATIO_MODE _downsample_mode = (
                 downsampling_modes[downsample_mode])
 

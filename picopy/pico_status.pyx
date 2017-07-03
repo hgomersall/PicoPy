@@ -2,7 +2,7 @@
 
 from pico_status cimport *
 
-cpdef check_status(unsigned long status_code):
+cpdef check_status(uint32_t status_code):
 
     if status_code != PICO_OK:
         raise PicoError(status_code)

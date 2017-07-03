@@ -2,15 +2,17 @@
 # heng@kedevelopments.co.uk
 #
 
-cpdef check_status(unsigned long pico_status)
+from libc.stdint cimport uint32_t
+
+cpdef check_status(uint32_t pico_status)
 
 #cdef extern from 'libps3000a-1.0/PicoStatus.h':
 #    ctypedef unsigned long PICO_INFO
 #    ctypedef unsigned long PICO_STATUS
 
 cdef extern from 'PicoStatus.h':
-    ctypedef unsigned long PICO_INFO
-    ctypedef unsigned long PICO_STATUS
+    ctypedef uint32_t PICO_INFO
+    ctypedef uint32_t PICO_STATUS
 
 # PICO_INFO flags
 cdef enum:
@@ -96,12 +98,12 @@ cdef enum:
     PICO_GET_VALUES_INTERRUPTED = 0x3D
     PICO_NOT_USED = 0x3F
     PICO_INVALID_SAMPLERATIO = 0x40
-    
-    # Operation could not be carried out because device was in an 
+
+    # Operation could not be carried out because device was in an
     # invalid state.
     PICO_INVALID_STATE = 0x41
-    
-    # Operation could not be carried out as rapid capture no of 
+
+    # Operation could not be carried out as rapid capture no of
     # waveforms are greater than the no of memory segments.
     PICO_NOT_ENOUGH_SEGMENTS = 0x42
 
@@ -121,13 +123,13 @@ cdef enum:
     PICO_FPGA_FAIL = 0x4E
     PICO_POWER_MANAGER = 0x4F
     PICO_INVALID_ANALOGUE_OFFSET = 0x50
-    
+
     # unable to configure the ps6000
     PICO_PLL_LOCK_FAILED = 0x51
-    
+
     # the ps6000 Analog board is not detectly connected to the digital board
     PICO_ANALOG_BOARD = 0x52
-    
+
     # unable to configure the Signal Generator
     PICO_CONFIG_FAIL_AWG = 0x53
     PICO_INITIALISE_FPGA = 0x54
@@ -144,7 +146,7 @@ cdef enum:
     PICO_NOT_USED_IN_THIS_CAPTURE_MODE = 0x5E
 
     PICO_GET_DATA_ACTIVE = 0x103
-    
+
     # used by the PT104 (USB) when connected via the Network Socket
     PICO_IP_NETWORKED = 0x104
     PICO_INVALID_IP_ADDRESS = 0x105
