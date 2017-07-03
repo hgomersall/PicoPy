@@ -3,4 +3,5 @@
 *.swp
 pico_status.c
 pico3k.c
+pico4k.c
 build
