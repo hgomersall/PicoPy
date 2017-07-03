@@ -880,20 +880,20 @@ cdef class Pico4k:
 
         default_trigger = ''
 
-        self.__hardware_variant = get_unit_info(
+        self._hardware_variant = get_unit_info(
                 self._handle, pico_status.PICO_VARIANT_INFO)
 
-        self.__max_sampling_rate = (
-                capability_dict[self.__hardware_variant]['max_sampling_rate'])
+        self._max_sampling_rate = (
+                capability_dict[self._hardware_variant]['max_sampling_rate'])
 
-        self.__serial_string = get_unit_info(
+        self._serial_string = get_unit_info(
                 self._handle, pico_status.PICO_BATCH_AND_SERIAL)
 
-        self.__segment_index = 0
+        self._segment_index = 0
 
         # __channel_states stores which channels are enabled along
         # with necessary info about that channel
-        self.__channel_states = {}
+        self._channel_states = {}
 
         channels = []
 
@@ -918,9 +918,9 @@ cdef class Pico4k:
 
         channels.append('ext')
 
-        self.__channels = tuple(channels)
+        self._channels = tuple(channels)
 
-        self.__trigger = {}
+        self._trigger = {}
 
         trigger_object = {'logic_function': ''}
 
@@ -938,10 +938,10 @@ cdef class Pico4k:
         this class refers.
         '''
 
-        info = {'hardware_variant': self.__hardware_variant,
-                'serial_string': self.__serial_string,
+        info = {'hardware_variant': self._hardware_variant,
+                'serial_string': self._serial_string,
                 'max_sampling_rate': capability_dict[
-                    self.__hardware_variant]['max_sampling_rate'],
+                    self._hardware_variant]['max_sampling_rate'],
                 }
 
         return info
@@ -952,7 +952,7 @@ cdef class Pico4k:
         set_channel(self._handle, channel, enable, voltage_range,
                 channel_type, offset)
 
-        self.__channel_states[channel] = (
+        self._channel_states[channel] = (
                 voltage_range_values[voltage_range_dict[voltage_range]],
                 enable)
 
@@ -972,7 +972,7 @@ cdef class Pico4k:
         refers to the channel, with each channel reference returning a
         dictionary like object with the following keys:
 
-        'upper_threshold' (volts),
+        'upper_threshold' (volts),, t
         'upper_hysteresis' (volts),
         'lower_threshold' (volts),
         'lower_hysteresis' (volts),
@@ -1031,7 +1031,7 @@ cdef class Pico4k:
 
         '''
 
-        logic_variables = self.__channels + ('PWQ',)
+        logic_variables = self._channels + ('PWQ',)
 
         # trigger_logic is a list (sum) of lists (products)
         trigger_logic = logic.get_minimal_sop_from_string(
@@ -1051,7 +1051,7 @@ cdef class Pico4k:
                 if condition is not None:
                     enabled_logic_variables.add(variable)
 
-        for channel in self.__channels:
+        for channel in self._channels:
 
             if channel in enabled_logic_variables:
 
@@ -1127,7 +1127,7 @@ cdef class Pico4k:
                 elif (each_property == 'PWQ_logic'):
                     # We don't want 'PWQ' to be a variable. This would break
                     # lots of things!
-                    logic_variables = self.__channels
+                    logic_variables = self._channels
 
                     pwq_logic = logic.get_minimal_sop_from_string(
                             property_value, logic_variables)
@@ -1148,7 +1148,7 @@ cdef class Pico4k:
 
 
         # Finally write the trigger dict back to the main triggers dict
-        self.__trigger = trigger
+        self._trigger = trigger
 
     def get_valid_sampling_period(self, sampling_period):
         '''Compute the closest valid sampling period to sampling_period
@@ -1164,12 +1164,12 @@ cdef class Pico4k:
         # The number of active channels dictates the maximum sampling
         # rate.
         active_channels = 0
-        for channel in self.__channel_states:
-            if self.__channel_states[channel][1]:
+        for channel in self._channel_states:
+            if self._channel_states[channel][1]:
                 active_channels += 1
 
         cdef uint32_t timebase_index = compute_timebase_index(
-                sampling_period, self.__max_sampling_rate, active_channels)
+                sampling_period, self._max_sampling_rate, active_channels)
 
         valid_period, max_samples = get_timebase(self._handle,
                 timebase_index, 0, 0)
@@ -1220,10 +1220,10 @@ cdef class Pico4k:
         min_val, max_val = get_sample_limits(self._handle)
         scalings = {}
 
-        for channel in self.__channel_states:
-            if self.__channel_states[channel][1]:
+        for channel in self._channel_states:
+            if self._channel_states[channel][1]:
                 scalings[channel] = (
-                        self.__channel_states[channel][0]/max_val)
+                        self._channel_states[channel][0]/max_val)
 
         return scalings
 
@@ -1274,8 +1274,8 @@ cdef class Pico4k:
             raise PicoError(pico_status.PICO_TOO_MANY_SAMPLES)
 
         data_channels = set()
-        for channel in self.__channel_states:
-            if self.__channel_states[channel][1]:
+        for channel in self._channel_states:
+            if self._channel_states[channel][1]:
                 data_channels.add(channel)
 
         active_channels = len(data_channels)
@@ -1285,7 +1285,7 @@ cdef class Pico4k:
                     'enabled.')
 
         timebase_index = compute_timebase_index(valid_sampling_period,
-                self.__max_sampling_rate, active_channels)
+                self._max_sampling_rate, active_channels)
 
         if autotrigger_timeout is None:
             autotrigger_timeout = 0.0
@@ -1301,7 +1301,7 @@ cdef class Pico4k:
                     (2**(8*sizeof(int32_t) - 1)/1e3,
                         float(autotrigger_timeout)))
 
-        setup_trigger(self._handle, self.__trigger, self.__channel_states,
+        setup_trigger(self._handle, self._trigger, self._channel_states,
                 sampling_period, autotrigger_timeout_ms)
 
         segment_index = 0
