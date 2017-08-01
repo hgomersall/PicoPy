@@ -28,7 +28,7 @@
 #
 
 import pyparsing
-import qm
+from . import qm
 import sys
 
 ParseError = pyparsing.ParseException
@@ -294,7 +294,7 @@ def get_minimal_sop_from_string(boolean_string, boolean_variables):
     for each_term in canonical_sop:
         and_terms = []
         
-        for j in xrange(len(boolean_variables)):
+        for j in range(len(boolean_variables)):
             if each_term[0] & 1<<j:
                 and_terms.append(True)
             
