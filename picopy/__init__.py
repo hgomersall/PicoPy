@@ -19,13 +19,17 @@
 ''' Import everything we want into the picopy namespace
 '''
 
-try:
-    from pico3k import Pico3k
-except ImportError:
-    pass
+from . import pico_status
 
-from triggers import (
+# try:
+    # from .pico3k import Pico3k
+# except ImportError:
+    # pass
+
+from .pico5k import Pico5k
+
+from .triggers import (
         EdgeTrigger,
         PulseWidthTrigger)
 
-import logic
+from . import logic
